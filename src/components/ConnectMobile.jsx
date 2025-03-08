@@ -9,6 +9,7 @@ function ConnectMobile() {
 	const videoRef = useRef(null);
 	const canvasRef = useRef(null);
 	const processingRef = useRef(false);
+	const streamRef = useRef(null);
 
 	const {
 		sessionId,
@@ -20,7 +21,9 @@ function ConnectMobile() {
 
 	// Initialize connection service when component mounts
 	useEffect(() => {
-		const urlSessionId = searchParams.get("session");
+		const urlSessionId =
+			searchParams.get("session") ||
+			localStorage.getItem("cardboardhrv-session-id");
 		if (!urlSessionId) {
 			navigate("/");
 			return;
@@ -31,6 +34,14 @@ function ConnectMobile() {
 			if (!success) {
 				console.error("Failed to initialize connection service");
 				navigate("/");
+				return;
+			}
+
+			// If we were previously recording, try to restore camera access
+			const wasRecording =
+				localStorage.getItem("cardboardhrv-was-recording") === "true";
+			if (wasRecording) {
+				requestCameraPermission();
 			}
 		};
 
@@ -38,12 +49,22 @@ function ConnectMobile() {
 
 		return () => {
 			cleanup();
-			if (videoRef.current && videoRef.current.srcObject) {
-				const tracks = videoRef.current.srcObject.getTracks();
-				tracks.forEach((track) => track.stop());
-			}
+			stopCamera();
 		};
 	}, [searchParams, navigate, initializeConnection, cleanup]);
+
+	// Stop camera function
+	const stopCamera = () => {
+		if (streamRef.current) {
+			const tracks = streamRef.current.getTracks();
+			tracks.forEach((track) => track.stop());
+			streamRef.current = null;
+		}
+		if (videoRef.current) {
+			videoRef.current.srcObject = null;
+		}
+		localStorage.setItem("cardboardhrv-was-recording", "false");
+	};
 
 	// Function to explicitly request camera permission
 	const requestCameraPermission = async () => {
@@ -54,14 +75,17 @@ function ConnectMobile() {
 				audio: false,
 			});
 
+			streamRef.current = stream;
 			if (videoRef.current) {
 				videoRef.current.srcObject = stream;
 				startStreaming(stream);
+				localStorage.setItem("cardboardhrv-was-recording", "true");
 			}
 
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
+			localStorage.setItem("cardboardhrv-was-recording", "false");
 			return false;
 		}
 	};
@@ -124,7 +148,10 @@ function ConnectMobile() {
 				}
 
 				processingRef.current = false;
-				requestAnimationFrame(processFrame);
+				if (streamRef.current) {
+					// Only continue if stream is active
+					requestAnimationFrame(processFrame);
+				}
 			} catch (error) {
 				console.error("Error processing frame:", error);
 				processingRef.current = false;
@@ -138,13 +165,29 @@ function ConnectMobile() {
 	};
 
 	const handleGoBack = () => {
-		if (videoRef.current && videoRef.current.srcObject) {
-			const tracks = videoRef.current.srcObject.getTracks();
-			tracks.forEach((track) => track.stop());
-		}
+		stopCamera();
 		cleanup();
 		navigate("/");
 	};
+
+	// Handle visibility change
+	useEffect(() => {
+		const handleVisibilityChange = () => {
+			if (document.hidden) {
+				// Page is hidden, stop camera to save resources
+				stopCamera();
+			} else if (connectionStatus === "connected") {
+				// Page is visible again and we're connected, restart camera
+				requestCameraPermission();
+			}
+		};
+
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [connectionStatus]);
 
 	return (
 		<div className="connect-mobile">
