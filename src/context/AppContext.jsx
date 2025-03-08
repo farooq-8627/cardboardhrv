@@ -51,74 +51,64 @@ export const AppContextProvider = {
 		const [isRecording, setIsRecording] = useState(false);
 		const recordingTimeoutRef = useRef(null);
 
-		// Refs to prevent duplicate event listeners
+		// Refs to prevent duplicate event listeners and track initialization
 		const eventListenersSet = useRef(false);
 		const initializationInProgress = useRef(false);
+		const isInitialized = useRef(false);
 
-		// Memoize event handlers to prevent recreating them on each render
+		// Memoize event handlers
 		const handleConnectionStatusChanged = useCallback((data) => {
-			const newStatus = data.status;
-			setConnectionStatus(newStatus);
-			setIsConnected(newStatus === "connected");
-			localStorage.setItem("cardboardhrv-connection-status", newStatus);
+			console.log("Connection status changed:", data.status);
+			setConnectionStatus(data.status);
+			setIsConnected(data.status === "connected");
+			localStorage.setItem("cardboardhrv-connection-status", data.status);
 		}, []);
 
 		const handleDevicesPaired = useCallback((data) => {
+			console.log("Devices paired:", data);
 			setDeviceInfo(data);
 			localStorage.setItem("cardboardhrv-device-info", JSON.stringify(data));
-			// When devices are paired, ensure connection status is updated
 			setConnectionStatus("connected");
 			setIsConnected(true);
 			localStorage.setItem("cardboardhrv-connection-status", "connected");
 		}, []);
 
 		const handleHeartRateData = useCallback((data) => {
-			try {
-				if (!data || typeof data.heartRate !== "number") {
-					console.warn("Invalid heart rate data received:", data);
-					return;
+			if (!data || typeof data.heartRate !== "number") {
+				console.warn("Invalid heart rate data received:", data);
+				return;
+			}
+
+			setCurrentHeartRate(data.heartRate);
+			setHeartRateData((prev) => {
+				if (!Array.isArray(prev)) prev = [];
+				const newData = [
+					...prev,
+					{
+						timestamp: data.timestamp || Date.now(),
+						value: data.heartRate,
+						ppg: data.ppgValue,
+					},
+				];
+				return newData.slice(-60);
+			});
+
+			setHrvMetrics((prev) => {
+				if (!prev || typeof prev !== "object") {
+					return { sdnn: 0, rmssd: 0, lf: 0, hf: 0, lfhf: 0 };
 				}
 
-				setCurrentHeartRate(data.heartRate);
-				setHeartRateData((prev) => {
-					if (!Array.isArray(prev)) prev = []; // Ensure prev is always an array
-					const newData = [
-						...prev,
-						{
-							timestamp: data.timestamp || Date.now(),
-							value: data.heartRate,
-							ppg: data.ppgValue,
-						},
-					];
-					return newData.slice(-60); // Keep last 60 data points
-				});
-
-				setHrvMetrics((prev) => {
-					if (!prev || typeof prev !== "object") {
-						return {
-							sdnn: 0,
-							rmssd: 0,
-							lf: 0,
-							hf: 0,
-							lfhf: 0,
-						};
-					}
-
-					if (prev.value) {
-						const lastHR = prev.value;
-						const currentHR = data.heartRate;
-						const lastRR = 60000 / lastHR;
-						const currentRR = 60000 / currentHR;
-						const diff = Math.abs(currentRR - lastRR);
-						const hrv = Math.sqrt(diff * diff);
-						return { ...prev, rmssd: Math.round(hrv) };
-					}
-					return prev;
-				});
-			} catch (error) {
-				console.error("Error processing heart rate data:", error);
-				// Don't update state if there's an error
-			}
+				if (prev.value) {
+					const lastHR = prev.value;
+					const currentHR = data.heartRate;
+					const lastRR = 60000 / lastHR;
+					const currentRR = 60000 / currentHR;
+					const diff = Math.abs(currentRR - lastRR);
+					const hrv = Math.sqrt(diff * diff);
+					return { ...prev, rmssd: Math.round(hrv) };
+				}
+				return prev;
+			});
 		}, []);
 
 		// Function to sync recording status across components
@@ -195,14 +185,40 @@ export const AppContextProvider = {
 			[lastFrameTime, syncRecordingStatus]
 		);
 
-		// Cleanup function with improved resource management
+		// Setup event listeners once
+		const setupEventListeners = useCallback(() => {
+			if (eventListenersSet.current) {
+				console.log("Event listeners already set up");
+				return;
+			}
+
+			console.log("Setting up event listeners");
+			connectionService.on("connectionStatusChanged", handleConnectionStatusChanged);
+			connectionService.on("devicesPaired", handleDevicesPaired);
+			connectionService.on("heartRateData", handleHeartRateData);
+
+			eventListenersSet.current = true;
+		}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
+
+		// Cleanup function
 		const cleanup = useCallback(() => {
+			console.log("Cleaning up AppContext");
 			if (recordingTimeoutRef.current) {
 				clearTimeout(recordingTimeoutRef.current);
 			}
-			syncRecordingStatus(false);
+
+			// Remove event listeners
+			if (eventListenersSet.current) {
+				connectionService.off("connectionStatusChanged", handleConnectionStatusChanged);
+				connectionService.off("devicesPaired", handleDevicesPaired);
+				connectionService.off("heartRateData", handleHeartRateData);
+				eventListenersSet.current = false;
+			}
+
+			// Reset state
+			setIsRecording(false);
 			setCameraFrame(null);
-			setHeartRateData([]); // Ensure this is always an array
+			setHeartRateData([]);
 			setCurrentHeartRate(0);
 			setHrvMetrics({
 				sdnn: 0,
@@ -214,83 +230,51 @@ export const AppContextProvider = {
 			setLastFrameTime(null);
 			setConnectionStatus("disconnected");
 			setDeviceInfo(null);
-			eventListenersSet.current = false; // Reset event listeners flag
-		}, [syncRecordingStatus]);
 
-		// Setup event listeners once
-		const setupEventListeners = useCallback(() => {
-			if (eventListenersSet.current) return;
-
-			connectionService.on(
-				"connectionStatusChanged",
-				handleConnectionStatusChanged
-			);
-			connectionService.on("devicesPaired", handleDevicesPaired);
-			connectionService.on("heartRateData", handleHeartRateData);
-
-			eventListenersSet.current = true;
-		}, [
-			handleConnectionStatusChanged,
-			handleDevicesPaired,
-			handleHeartRateData,
-		]);
+			// Reset refs
+			isInitialized.current = false;
+			initializationInProgress.current = false;
+		}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
 
 		// Initialize connection service
-		const initializeConnection = useCallback(
-			async (newSessionId, deviceType) => {
-				if (!newSessionId || initializationInProgress.current) return false;
-
-				try {
-					initializationInProgress.current = true;
-					setupEventListeners();
-
-					const success = await connectionService.initialize(
-						newSessionId,
-						deviceType
-					);
-					if (success) {
-						setSessionId(newSessionId);
-						localStorage.setItem("cardboardhrv-session-id", newSessionId);
-						return true;
-					}
-					return false;
-				} finally {
-					initializationInProgress.current = false;
-				}
-			},
-			[setupEventListeners]
-		);
-
-		// Initial connection setup and visibility change handler
-		useEffect(() => {
-			const handleVisibilityChange = () => {
-				if (!document.hidden && sessionId) {
-					const isMobilePath = window.location.pathname.includes("/mobile");
-					const deviceType = isMobilePath ? "mobile" : "desktop";
-
-					// Only reinitialize if we're not already connected
-					if (connectionStatus !== "connected") {
-						initializeConnection(sessionId, deviceType);
-					}
-				}
-			};
-
-			// Initial setup
-			if (sessionId && connectionStatus !== "connected") {
-				const isMobilePath = window.location.pathname.includes("/mobile");
-				const deviceType = isMobilePath ? "mobile" : "desktop";
-				initializeConnection(sessionId, deviceType);
+		const initializeConnection = useCallback(async (newSessionId, deviceType) => {
+			if (!newSessionId || initializationInProgress.current) {
+				console.log("Initialization skipped - already in progress or no session ID");
+				return false;
 			}
 
-			document.addEventListener("visibilitychange", handleVisibilityChange);
+			if (isInitialized.current && sessionId === newSessionId) {
+				console.log("Already initialized with this session ID");
+				return true;
+			}
+
+			try {
+				console.log("Initializing connection:", newSessionId, deviceType);
+				initializationInProgress.current = true;
+				setupEventListeners();
+
+				const success = await connectionService.initialize(newSessionId, deviceType);
+				if (success) {
+					setSessionId(newSessionId);
+					localStorage.setItem("cardboardhrv-session-id", newSessionId);
+					isInitialized.current = true;
+					return true;
+				}
+				return false;
+			} catch (error) {
+				console.error("Error initializing connection:", error);
+				return false;
+			} finally {
+				initializationInProgress.current = false;
+			}
+		}, [setupEventListeners, sessionId]);
+
+		// Cleanup on unmount
+		useEffect(() => {
 			return () => {
-				document.removeEventListener(
-					"visibilitychange",
-					handleVisibilityChange
-				);
 				cleanup();
 			};
-		}, [sessionId, connectionStatus, initializeConnection, cleanup]);
+		}, [cleanup]);
 
 		const value = {
 			isConnected,
