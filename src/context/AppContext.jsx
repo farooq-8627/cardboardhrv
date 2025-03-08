@@ -103,7 +103,7 @@ export function AppProvider({ children }) {
 					data.deviceId
 				);
 
-				// Update frame immediately
+				// Update frame and recording status immediately
 				setCameraFrame(data.imageData);
 				setLastFrameTime(data.timestamp);
 				setIsRecording(true);
@@ -114,20 +114,17 @@ export function AppProvider({ children }) {
 					clearTimeout(recordingTimeoutRef.current);
 				}
 
-				// Set new timeout for 2 seconds
+				// Set new timeout for 5 seconds (increased from 2 to be less aggressive)
 				recordingTimeoutRef.current = setTimeout(() => {
-					if (!document.hidden) {
+					const timeSinceLastFrame = Date.now() - data.timestamp;
+					if (timeSinceLastFrame > 5000 && !document.hidden) {
 						console.log(
-							"No frames received for 2 seconds, marking as not recording"
+							"No frames received for 5 seconds, marking as not recording"
 						);
 						setIsRecording(false);
 						localStorage.setItem("cardboardhrv-was-recording", "false");
-						// Only clear the camera frame if we haven't received a new one
-						if (lastFrameTime === data.timestamp) {
-							setCameraFrame(null);
-						}
 					}
-				}, 2000);
+				}, 5000);
 			} else {
 				console.warn("Received camera frame data without imageData");
 				setIsRecording(false);
@@ -136,6 +133,12 @@ export function AppProvider({ children }) {
 		},
 		[lastFrameTime]
 	);
+
+	// Add recording status sync function
+	const syncRecordingStatus = useCallback((status) => {
+		setIsRecording(status);
+		localStorage.setItem("cardboardhrv-was-recording", status.toString());
+	}, []);
 
 	// Setup event listeners once
 	const setupEventListeners = useCallback(() => {
@@ -235,6 +238,7 @@ export function AppProvider({ children }) {
 		isRecording,
 		initializeConnection,
 		handleCameraFrame,
+		syncRecordingStatus,
 		cleanup,
 	};
 

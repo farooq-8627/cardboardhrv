@@ -74,13 +74,14 @@ function LiveMonitor() {
 						);
 						onValue(frameRef, (snapshot) => {
 							const frameData = snapshot.val();
-							console.log("Received frame data:", frameData ? "yes" : "no");
 							if (frameData && frameData.imageData) {
 								console.log(
 									"Processing frame from Firebase at:",
-									new Date().toLocaleTimeString()
+									new Date(frameData.timestamp).toLocaleTimeString()
 								);
 								handleCameraFrame(frameData);
+							} else if (!frameData) {
+								console.log("No frame data available");
 							}
 						});
 					} else {

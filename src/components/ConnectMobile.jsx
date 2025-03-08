@@ -21,6 +21,7 @@ function ConnectMobile() {
 		initializeConnection,
 		cleanup,
 		handleCameraFrame,
+		syncRecordingStatus,
 	} = useAppContext();
 
 	// Initialize connection service when component mounts
@@ -80,25 +81,6 @@ function ConnectMobile() {
 			// Draw the current video frame
 			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-			// Get image data for heart rate processing
-			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-			const data = imageData.data;
-
-			// Process red channel for PPG signal
-			let redSum = 0;
-			for (let i = 0; i < data.length; i += 4) {
-				redSum += data[i];
-			}
-			const redAvg = redSum / (data.length / 4);
-
-			// Send heart rate data
-			const simulatedHeartRate = Math.floor(60 + Math.random() * 30);
-			connectionService.sendHeartRateData({
-				heartRate: simulatedHeartRate,
-				timestamp: Date.now(),
-				rawData: redAvg,
-			});
-
 			// Create frame data
 			const smallCanvas = document.createElement("canvas");
 			const smallCtx = smallCanvas.getContext("2d");
@@ -130,11 +112,11 @@ function ConnectMobile() {
 				.sendCameraFrame(frameData)
 				.then(() => {
 					console.log("Frame sent successfully");
-					setIsRecording(true); // Update recording status after successful frame send
+					syncRecordingStatus(true);
 				})
 				.catch((error) => {
 					console.error("Error sending frame:", error);
-					setIsRecording(false); // Update recording status on error
+					syncRecordingStatus(false);
 				});
 
 			processingRef.current = false;
@@ -143,14 +125,14 @@ function ConnectMobile() {
 			if (streamRef.current) {
 				frameProcessingRef.current = requestAnimationFrame(processFrame);
 			} else {
-				setIsRecording(false); // Update recording status if stream is gone
+				syncRecordingStatus(false);
 			}
 		} catch (error) {
 			console.error("Error processing frame:", error);
 			processingRef.current = false;
-			setIsRecording(false); // Update recording status on error
+			syncRecordingStatus(false);
 		}
-	}, [handleCameraFrame, sessionId]);
+	}, [handleCameraFrame, sessionId, syncRecordingStatus]);
 
 	// Function to start streaming camera data
 	const startStreaming = useCallback(
@@ -166,23 +148,24 @@ function ConnectMobile() {
 				console.log("Video metadata loaded, starting playback...");
 				video.play().catch((error) => {
 					console.error("Error playing video:", error);
+					syncRecordingStatus(false);
 				});
 				processFrame();
-				setIsRecording(true);
+				syncRecordingStatus(true);
 			};
 
 			video.onplay = () => {
 				console.log("Video playback started");
-				setIsRecording(true);
+				syncRecordingStatus(true);
 			};
 
 			// Add error handling for video
 			video.onerror = (error) => {
 				console.error("Video error:", error);
-				setIsRecording(false);
+				syncRecordingStatus(false);
 			};
 		},
-		[processFrame]
+		[processFrame, syncRecordingStatus]
 	);
 
 	// Function to explicitly request camera permission
@@ -199,16 +182,16 @@ function ConnectMobile() {
 			startStreaming(stream);
 			localStorage.setItem("cardboardhrv-was-recording", "true");
 			setHasCameraAccess(true);
-			setIsRecording(true);
+			syncRecordingStatus(true);
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
 			localStorage.setItem("cardboardhrv-was-recording", "false");
 			setHasCameraAccess(false);
-			setIsRecording(false);
+			syncRecordingStatus(false);
 			return false;
 		}
-	}, [startStreaming]);
+	}, [startStreaming, syncRecordingStatus]);
 
 	// Stop camera function
 	const stopCamera = useCallback(() => {
@@ -228,8 +211,8 @@ function ConnectMobile() {
 		localStorage.setItem("cardboardhrv-was-recording", "false");
 		processingRef.current = false;
 		setHasCameraAccess(false);
-		setIsRecording(false);
-	}, []);
+		syncRecordingStatus(false);
+	}, [syncRecordingStatus]);
 
 	const handleGoBack = useCallback(() => {
 		stopCamera();
