@@ -119,15 +119,18 @@ function ConnectMobile() {
 				rawData: redAvg,
 			});
 
-			// Send camera frame (every ~10 frames)
-			if (Math.random() < 0.1) {
+			// Send camera frame more frequently (every 3-4 frames)
+			if (Math.random() < 0.3) {
 				const smallCanvas = document.createElement("canvas");
 				const smallCtx = smallCanvas.getContext("2d");
-				smallCanvas.width = 160;
-				smallCanvas.height = 120;
+				smallCanvas.width = 320; // Increased resolution
+				smallCanvas.height = 240;
 				smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
-				const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.5);
+				const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.7); // Better quality
+
+				// Send frame both through context and connection service
 				handleCameraFrame({ imageData: frameDataUrl, timestamp: Date.now() });
+				connectionService.sendCameraFrame(frameDataUrl);
 			}
 
 			processingRef.current = false;
@@ -150,8 +153,15 @@ function ConnectMobile() {
 			streamRef.current = stream;
 
 			video.onloadedmetadata = () => {
-				video.play();
+				video.play().catch((error) => {
+					console.error("Error playing video:", error);
+				});
 				processFrame();
+			};
+
+			// Add error handling for video
+			video.onerror = (error) => {
+				console.error("Video error:", error);
 			};
 		},
 		[processFrame]

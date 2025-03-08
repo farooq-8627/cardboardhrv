@@ -250,6 +250,9 @@ function LiveMonitor() {
 									backgroundColor: "#f8f9fa",
 									borderRadius: "4px",
 									overflow: "hidden",
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
 								}}
 							>
 								{cameraFrame ? (
@@ -257,10 +260,14 @@ function LiveMonitor() {
 										src={cameraFrame}
 										alt="Camera Feed"
 										style={{
-											width: "100%",
-											height: "100%",
+											maxWidth: "100%",
+											maxHeight: "100%",
 											objectFit: "contain",
 											display: "block",
+										}}
+										onError={(e) => {
+											console.error("Error loading camera frame:", e);
+											e.target.style.display = "none";
 										}}
 									/>
 								) : (
@@ -271,6 +278,8 @@ function LiveMonitor() {
 											alignItems: "center",
 											justifyContent: "center",
 											height: "100%",
+											textAlign: "center",
+											padding: "1rem",
 										}}
 									>
 										<div
@@ -279,7 +288,11 @@ function LiveMonitor() {
 										>
 											📷
 										</div>
-										<p>Waiting for camera feed from mobile device...</p>
+										<p style={{ margin: 0 }}>
+											{connectionStatus === "connected"
+												? "Waiting for camera feed..."
+												: "Connect your mobile device to start streaming"}
+										</p>
 									</div>
 								)}
 
@@ -297,6 +310,7 @@ function LiveMonitor() {
 											fontSize: "0.8rem",
 											display: "flex",
 											alignItems: "center",
+											gap: "4px",
 										}}
 									>
 										<div
@@ -305,7 +319,6 @@ function LiveMonitor() {
 												height: "8px",
 												borderRadius: "50%",
 												backgroundColor: "#fff",
-												marginRight: "4px",
 												animation: "pulse 1s infinite",
 											}}
 										></div>

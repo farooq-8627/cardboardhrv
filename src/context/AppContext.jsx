@@ -16,7 +16,9 @@ export function useAppContext() {
 
 export function AppProvider({ children }) {
 	const [isConnected, setIsConnected] = useState(() => {
-		return localStorage.getItem("cardboardhrv-connection-status") === "connected";
+		return (
+			localStorage.getItem("cardboardhrv-connection-status") === "connected"
+		);
 	});
 	const [heartRateData, setHeartRateData] = useState([]);
 	const [currentHeartRate, setCurrentHeartRate] = useState(0);
@@ -31,7 +33,9 @@ export function AppProvider({ children }) {
 		return localStorage.getItem("cardboardhrv-session-id") || "";
 	});
 	const [connectionStatus, setConnectionStatus] = useState(() => {
-		return localStorage.getItem("cardboardhrv-connection-status") || "disconnected";
+		return (
+			localStorage.getItem("cardboardhrv-connection-status") || "disconnected"
+		);
 	});
 	const [deviceInfo, setDeviceInfo] = useState(() => {
 		const stored = localStorage.getItem("cardboardhrv-device-info");
@@ -68,7 +72,10 @@ export function AppProvider({ children }) {
 	const handleHeartRateData = useCallback((data) => {
 		setCurrentHeartRate(data.heartRate);
 		setHeartRateData((prev) => {
-			const newData = [...prev, { timestamp: data.timestamp, value: data.heartRate }];
+			const newData = [
+				...prev,
+				{ timestamp: data.timestamp, value: data.heartRate },
+			];
 			return newData.slice(-60);
 		});
 
@@ -88,6 +95,7 @@ export function AppProvider({ children }) {
 
 	const handleCameraFrame = useCallback((data) => {
 		if (data.imageData) {
+			// Update frame immediately
 			setCameraFrame(data.imageData);
 			setLastFrameTime(data.timestamp);
 			setIsRecording(true);
@@ -105,6 +113,12 @@ export function AppProvider({ children }) {
 					localStorage.setItem("cardboardhrv-was-recording", "false");
 				}
 			}, 5000);
+
+			// Log frame received for debugging
+			console.log(
+				"Camera frame received:",
+				new Date(data.timestamp).toLocaleTimeString()
+			);
 		}
 	}, []);
 
@@ -112,7 +126,10 @@ export function AppProvider({ children }) {
 	const setupEventListeners = useCallback(() => {
 		if (eventListenersSet.current) return;
 
-		connectionService.on("connectionStatusChanged", handleConnectionStatusChanged);
+		connectionService.on(
+			"connectionStatusChanged",
+			handleConnectionStatusChanged
+		);
 		connectionService.on("devicesPaired", handleDevicesPaired);
 		connectionService.on("heartRateData", handleHeartRateData);
 
@@ -120,30 +137,39 @@ export function AppProvider({ children }) {
 	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
 
 	// Initialize connection service
-	const initializeConnection = useCallback(async (newSessionId, deviceType) => {
-		if (!newSessionId || initializationInProgress.current) return false;
+	const initializeConnection = useCallback(
+		async (newSessionId, deviceType) => {
+			if (!newSessionId || initializationInProgress.current) return false;
 
-		try {
-			initializationInProgress.current = true;
-			setupEventListeners();
+			try {
+				initializationInProgress.current = true;
+				setupEventListeners();
 
-			const success = await connectionService.initialize(newSessionId, deviceType);
-			if (success) {
-				setSessionId(newSessionId);
-				localStorage.setItem("cardboardhrv-session-id", newSessionId);
-				return true;
+				const success = await connectionService.initialize(
+					newSessionId,
+					deviceType
+				);
+				if (success) {
+					setSessionId(newSessionId);
+					localStorage.setItem("cardboardhrv-session-id", newSessionId);
+					return true;
+				}
+				return false;
+			} finally {
+				initializationInProgress.current = false;
 			}
-			return false;
-		} finally {
-			initializationInProgress.current = false;
-		}
-	}, [setupEventListeners]);
+		},
+		[setupEventListeners]
+	);
 
 	// Clean up function
 	const cleanup = useCallback(() => {
 		if (!eventListenersSet.current) return;
 
-		connectionService.off("connectionStatusChanged", handleConnectionStatusChanged);
+		connectionService.off(
+			"connectionStatusChanged",
+			handleConnectionStatusChanged
+		);
 		connectionService.off("devicesPaired", handleDevicesPaired);
 		connectionService.off("heartRateData", handleHeartRateData);
 
@@ -159,7 +185,7 @@ export function AppProvider({ children }) {
 			if (!document.hidden && sessionId) {
 				const isMobilePath = window.location.pathname.includes("/mobile");
 				const deviceType = isMobilePath ? "mobile" : "desktop";
-				
+
 				// Only reinitialize if we're not already connected
 				if (connectionStatus !== "connected") {
 					initializeConnection(sessionId, deviceType);
