@@ -39,6 +39,9 @@ function LiveMonitor() {
 	const [connectionInfo, setConnectionInfo] = useState("");
 	const [deviceInfo, setDeviceInfo] = useState(null);
 	const [error, setError] = useState("");
+	const [cameraFrame, setCameraFrame] = useState(null);
+	const [lastFrameTime, setLastFrameTime] = useState(null);
+	const [isRecording, setIsRecording] = useState(false);
 
 	// Chart data
 	const heartRateChartRef = useRef(null);
@@ -70,6 +73,23 @@ function LiveMonitor() {
 				connectionService.on("devicesPaired", handleDevicesPaired);
 				connectionService.on("heartRateData", handleHeartRateData);
 
+				// Set up listener for camera frames
+				if (connectionService.useDirectConnection) {
+					window.addEventListener("message", handleDirectMessage);
+				} else {
+					// Set up Firebase listener for camera frames
+					const database = connectionService.getDatabase();
+					if (database) {
+						const frameRef = ref(database, `sessions/${sessionId}/cameraFrame`);
+						onValue(frameRef, (snapshot) => {
+							const frameData = snapshot.val();
+							if (frameData && frameData.imageData) {
+								handleCameraFrame(frameData);
+							}
+						});
+					}
+				}
+
 				// If direct connect is true, try to connect immediately
 				if (directConnect) {
 					connectionService.sendMessage("Desktop is ready for connection");
@@ -91,10 +111,44 @@ function LiveMonitor() {
 			connectionService.off("devicesPaired", handleDevicesPaired);
 			connectionService.off("heartRateData", handleHeartRateData);
 
+			// Clean up direct message listener
+			window.removeEventListener("message", handleDirectMessage);
+
 			// Disconnect from the session
 			connectionService.disconnect();
 		};
 	}, [sessionId, directConnect]);
+
+	// Handle direct messages (for camera frames)
+	const handleDirectMessage = (event) => {
+		// Only process messages from our own origin
+		if (event.origin !== window.location.origin) return;
+
+		const data = event.data;
+		if (!data || !data.type || !data.sessionId) return;
+
+		// Only process messages for our session
+		if (data.sessionId !== sessionId) return;
+
+		if (data.type === "cameraFrame") {
+			handleCameraFrame(data);
+		}
+	};
+
+	// Handle camera frame data
+	const handleCameraFrame = (data) => {
+		if (data.imageData) {
+			setCameraFrame(data.imageData);
+			setLastFrameTime(data.timestamp);
+			setIsRecording(true);
+
+			// Set a timeout to mark as not recording if no frames received for 5 seconds
+			clearTimeout(window.recordingTimeout);
+			window.recordingTimeout = setTimeout(() => {
+				setIsRecording(false);
+			}, 5000);
+		}
+	};
 
 	// Handle connection status changes
 	const handleConnectionStatusChanged = (data) => {
@@ -253,19 +307,159 @@ function LiveMonitor() {
 								</div>
 							)}
 							{connectionStatus === "connecting" && (
-								<div className="connection-instructions" style={{ marginTop: "1rem", padding: "1rem", backgroundColor: "#f8f9fa", borderRadius: "8px" }}>
-									<h3 style={{ marginBottom: "0.5rem" }}>Waiting for Mobile Device</h3>
-									<p>Please scan the QR code on the Connect Phone page with your mobile device.</p>
+								<div
+									className="connection-instructions"
+									style={{
+										marginTop: "1rem",
+										padding: "1rem",
+										backgroundColor: "#f8f9fa",
+										borderRadius: "8px",
+									}}
+								>
+									<h3 style={{ marginBottom: "0.5rem" }}>
+										Waiting for Mobile Device
+									</h3>
+									<p>
+										Please scan the QR code on the Connect Phone page with your
+										mobile device.
+									</p>
 									<p>Make sure your mobile device has camera access enabled.</p>
-									<button 
-										className="primary-button" 
-										onClick={() => window.location.href = "/connect"}
+									<button
+										className="primary-button"
+										onClick={() => (window.location.href = "/connect")}
 										style={{ marginTop: "1rem" }}
 									>
 										Go to Connect Page
 									</button>
 								</div>
 							)}
+						</div>
+
+						{/* Camera Feed Display */}
+						<div className="camera-feed-card card">
+							<h2>Mobile Camera Feed</h2>
+							<div
+								className="camera-status"
+								style={{
+									display: "flex",
+									alignItems: "center",
+									marginBottom: "0.5rem",
+								}}
+							>
+								<div
+									className={`status-dot ${
+										isRecording ? "recording" : "not-recording"
+									}`}
+									style={{
+										width: "12px",
+										height: "12px",
+										borderRadius: "50%",
+										backgroundColor: isRecording ? "#dc3545" : "#6c757d",
+										marginRight: "8px",
+										animation: isRecording ? "pulse 1s infinite" : "none",
+									}}
+								></div>
+								<span>{isRecording ? "Recording" : "Not Recording"}</span>
+								{lastFrameTime && (
+									<span
+										style={{
+											marginLeft: "auto",
+											fontSize: "0.8rem",
+											color: "#6c757d",
+										}}
+									>
+										Last frame: {new Date(lastFrameTime).toLocaleTimeString()}
+									</span>
+								)}
+							</div>
+
+							<div
+								className="camera-feed-container"
+								style={{
+									position: "relative",
+									width: "100%",
+									height: "240px",
+									backgroundColor: "#f8f9fa",
+									borderRadius: "4px",
+									overflow: "hidden",
+								}}
+							>
+								{cameraFrame ? (
+									<img
+										src={cameraFrame}
+										alt="Camera Feed"
+										style={{
+											width: "100%",
+											height: "100%",
+											objectFit: "contain",
+											display: "block",
+										}}
+									/>
+								) : (
+									<div
+										style={{
+											display: "flex",
+											flexDirection: "column",
+											alignItems: "center",
+											justifyContent: "center",
+											height: "100%",
+										}}
+									>
+										<div
+											className="camera-icon"
+											style={{ fontSize: "3rem", marginBottom: "1rem" }}
+										>
+											📷
+										</div>
+										<p>Waiting for camera feed from mobile device...</p>
+									</div>
+								)}
+
+								{isRecording && (
+									<div
+										className="recording-indicator"
+										style={{
+											position: "absolute",
+											top: "10px",
+											right: "10px",
+											backgroundColor: "rgba(220, 53, 69, 0.7)",
+											color: "white",
+											padding: "0.25rem 0.5rem",
+											borderRadius: "4px",
+											fontSize: "0.8rem",
+											display: "flex",
+											alignItems: "center",
+										}}
+									>
+										<div
+											style={{
+												width: "8px",
+												height: "8px",
+												borderRadius: "50%",
+												backgroundColor: "#fff",
+												marginRight: "4px",
+												animation: "pulse 1s infinite",
+											}}
+										></div>
+										REC
+									</div>
+								)}
+							</div>
+
+							<div
+								className="camera-instructions"
+								style={{
+									marginTop: "0.5rem",
+									fontSize: "0.9rem",
+									color: "#6c757d",
+								}}
+							>
+								<p>
+									This shows what your phone's camera is currently seeing.
+									Position your finger over the camera lens for accurate
+									readings.
+								</p>
+							</div>
 						</div>
 
 						<div className="metrics-container">
@@ -284,9 +478,27 @@ function LiveMonitor() {
 										/>
 									</div>
 								) : (
-									<div className="no-data-message" style={{ padding: "2rem", textAlign: "center", color: "#6c757d" }}>
+									<div
+										className="no-data-message"
+										style={{
+											padding: "2rem",
+											textAlign: "center",
+											color: "#6c757d",
+										}}
+									>
 										<p>Waiting for heart rate data...</p>
-										<div className="spinner" style={{ margin: "1rem auto", width: "30px", height: "30px", borderRadius: "50%", border: "3px solid #f3f3f3", borderTop: "3px solid #3498db", animation: "spin 1s linear infinite" }}></div>
+										<div
+											className="spinner"
+											style={{
+												margin: "1rem auto",
+												width: "30px",
+												height: "30px",
+												borderRadius: "50%",
+												border: "3px solid #f3f3f3",
+												borderTop: "3px solid #3498db",
+												animation: "spin 1s linear infinite",
+											}}
+										></div>
 									</div>
 								)}
 							</div>
@@ -306,9 +518,27 @@ function LiveMonitor() {
 										/>
 									</div>
 								) : (
-									<div className="no-data-message" style={{ padding: "2rem", textAlign: "center", color: "#6c757d" }}>
+									<div
+										className="no-data-message"
+										style={{
+											padding: "2rem",
+											textAlign: "center",
+											color: "#6c757d",
+										}}
+									>
 										<p>Waiting for HRV data...</p>
-										<div className="spinner" style={{ margin: "1rem auto", width: "30px", height: "30px", borderRadius: "50%", border: "3px solid #f3f3f3", borderTop: "3px solid #3498db", animation: "spin 1s linear infinite" }}></div>
+										<div
+											className="spinner"
+											style={{
+												margin: "1rem auto",
+												width: "30px",
+												height: "30px",
+												borderRadius: "50%",
+												border: "3px solid #f3f3f3",
+												borderTop: "3px solid #3498db",
+												animation: "spin 1s linear infinite",
+											}}
+										></div>
 									</div>
 								)}
 							</div>
@@ -326,14 +556,42 @@ function LiveMonitor() {
 									Watch your heart rate and HRV measurements update in real-time
 								</li>
 							</ol>
-							<div className="tip" style={{ marginTop: "1rem", padding: "0.75rem", backgroundColor: "#e9f7ef", borderRadius: "4px", borderLeft: "4px solid #28a745" }}>
-								<p><strong>Tip:</strong> For best results, ensure good lighting and avoid moving your finger during measurement.</p>
+							<div
+								className="tip"
+								style={{
+									marginTop: "1rem",
+									padding: "0.75rem",
+									backgroundColor: "#e9f7ef",
+									borderRadius: "4px",
+									borderLeft: "4px solid #28a745",
+								}}
+							>
+								<p>
+									<strong>Tip:</strong> For best results, ensure good lighting
+									and avoid moving your finger during measurement.
+								</p>
 							</div>
-							<div className="troubleshooting" style={{ marginTop: "1rem", padding: "0.75rem", backgroundColor: "#f8f9fa", borderRadius: "4px", borderLeft: "4px solid #007bff" }}>
-								<p><strong>Troubleshooting:</strong></p>
+							<div
+								className="troubleshooting"
+								style={{
+									marginTop: "1rem",
+									padding: "0.75rem",
+									backgroundColor: "#f8f9fa",
+									borderRadius: "4px",
+									borderLeft: "4px solid #007bff",
+								}}
+							>
+								<p>
+									<strong>Troubleshooting:</strong>
+								</p>
 								<ul style={{ marginLeft: "1.5rem", marginTop: "0.5rem" }}>
-									<li>If no data appears, check that your phone's camera is uncovered</li>
-									<li>Try adjusting the pressure of your finger on the camera</li>
+									<li>
+										If no data appears, check that your phone's camera is
+										uncovered
+									</li>
+									<li>
+										Try adjusting the pressure of your finger on the camera
+									</li>
 									<li>Ensure there is adequate lighting in the room</li>
 									<li>If problems persist, try reconnecting your phone</li>
 								</ul>

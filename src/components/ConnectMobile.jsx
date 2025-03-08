@@ -267,6 +267,33 @@ function ConnectMobile() {
 						rawData: redAvg,
 					});
 
+					// Send camera frame to desktop (every 10 frames to reduce bandwidth)
+					if (Math.random() < 0.1) {
+						// Approximately every 10 frames
+						// Create a smaller version of the canvas for transmission
+						const smallCanvas = document.createElement("canvas");
+						const smallCtx = smallCanvas.getContext("2d");
+
+						// Set to a smaller size to reduce data
+						smallCanvas.width = 160;
+						smallCanvas.height = 120;
+
+						// Draw the video frame to the small canvas
+						smallCtx.drawImage(
+							video,
+							0,
+							0,
+							smallCanvas.width,
+							smallCanvas.height
+						);
+
+						// Get the data URL of the small canvas
+						const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.5);
+
+						// Send the frame data
+						connectionService.sendCameraFrame(frameDataUrl);
+					}
+
 					processingRef.current = false;
 				} catch (error) {
 					console.error("Error processing frame:", error);

@@ -767,6 +767,62 @@ class ConnectionService {
 			console.log(`[ConnectionService]`, ...args);
 		}
 	}
+
+	// Add a new method to send camera frame data
+	async sendCameraFrame(imageData) {
+		if (!this.isInitialized) {
+			console.error("Connection service not initialized");
+			return false;
+		}
+
+		if (this.deviceType !== "mobile") {
+			console.error("Only mobile devices can send camera frames");
+			return false;
+		}
+
+		try {
+			// If using direct connection, send via postMessage
+			if (this.useDirectConnection) {
+				this.sendDirectMessage({
+					type: "cameraFrame",
+					sessionId: this.sessionId,
+					deviceId: this.deviceId,
+					imageData: imageData,
+					timestamp: Date.now(),
+				});
+				return true;
+			}
+
+			// Otherwise, send via Firebase
+			if (firebaseAvailable) {
+				// Send camera frame data to Firebase
+				const frameRef = ref(
+					database,
+					`sessions/${this.sessionId}/cameraFrame`
+				);
+				await set(frameRef, {
+					imageData: imageData,
+					timestamp: Date.now(),
+					deviceId: this.deviceId,
+				});
+
+				return true;
+			}
+
+			return false;
+		} catch (error) {
+			console.error("Error sending camera frame:", error);
+			return false;
+		}
+	}
+
+	// Add a method to get the database instance
+	getDatabase() {
+		if (firebaseAvailable) {
+			return database;
+		}
+		return null;
+	}
 }
 
 // Create a singleton instance
