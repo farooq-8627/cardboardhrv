@@ -5,415 +5,568 @@
  * It provides a simple API for connecting devices and sharing data between them.
  */
 
+import { initializeApp } from "firebase/app";
+import {
+	getDatabase,
+	ref,
+	set,
+	onValue,
+	update,
+	remove,
+} from "firebase/database";
+
 // Firebase configuration
 const firebaseConfig = {
-	apiKey: "AIzaSyDQzFOQoDgYMXnrLd8nOkD5-N-_X4-cdSw",
+	apiKey: "AIzaSyDQzEMQtT9afQiMlK-31GxJst9iqK4_8Gg",
 	authDomain: "cardboardhrv.firebaseapp.com",
 	databaseURL: "https://cardboardhrv-default-rtdb.firebaseio.com",
 	projectId: "cardboardhrv",
 	storageBucket: "cardboardhrv.appspot.com",
-	messagingSenderId: "1082669024548",
-	appId: "1:1082669024548:web:3a5e9d8e9f9f9f9f9f9f9f",
+	messagingSenderId: "1098040621778",
+	appId: "1:1098040621778:web:5f9e3a5f1c9b5e5e5e5e5e",
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+
+// Event types
+const EVENT_TYPES = {
+	CONNECTION_STATUS_CHANGED: "connectionStatusChanged",
+	DEVICES_PAIRED: "devicesPaired",
+	DEVICE_DISCONNECTED: "deviceDisconnected",
+	HEART_RATE_DATA: "heartRateData",
+	MESSAGE: "message",
 };
 
 class ConnectionService {
 	constructor() {
-		this.firebase = null;
-		this.database = null;
-		this.sessionRef = null;
 		this.sessionId = null;
-		this.isInitialized = false;
-		this.eventListeners = {};
 		this.deviceType = null; // 'mobile' or 'desktop'
+		this.deviceId = this.generateDeviceId();
+		this.isInitialized = false;
 		this.connectionStatus = "disconnected";
+		this.pairedDeviceId = null;
+		this.eventListeners = {
+			[EVENT_TYPES.CONNECTION_STATUS_CHANGED]: [],
+			[EVENT_TYPES.DEVICES_PAIRED]: [],
+			[EVENT_TYPES.DEVICE_DISCONNECTED]: [],
+			[EVENT_TYPES.HEART_RATE_DATA]: [],
+			[EVENT_TYPES.MESSAGE]: [],
+		};
+
+		// Debug flag
+		this.debug = true;
 	}
 
-	/**
-	 * Initialize the connection service
-	 * @param {string} sessionId - The session ID to use for the connection
-	 * @param {string} deviceType - The type of device ('mobile' or 'desktop')
-	 * @returns {Promise<boolean>} - Whether initialization was successful
-	 */
 	async initialize(sessionId, deviceType) {
-		if (this.isInitialized) {
-			console.log("Connection service already initialized");
-			return true;
+		if (!sessionId) {
+			console.error("Session ID is required");
+			return false;
 		}
 
+		if (deviceType !== "mobile" && deviceType !== "desktop") {
+			console.error('Device type must be either "mobile" or "desktop"');
+			return false;
+		}
+
+		this.sessionId = sessionId;
+		this.deviceType = deviceType;
+
+		this.log(
+			`Initializing connection service for session ${sessionId} as ${deviceType}`
+		);
+
 		try {
-			// Import Firebase dynamically
-			const firebaseApp = await import(
-				"https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"
-			);
-			const firebaseDatabase = await import(
-				"https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"
-			);
+			// Set up connection in Firebase
+			const sessionRef = ref(database, `sessions/${sessionId}`);
 
-			// Initialize Firebase
-			this.firebase = firebaseApp;
-			const app = firebaseApp.initializeApp(firebaseConfig);
-			this.database = firebaseDatabase.getDatabase(app);
-
-			this.sessionId = sessionId;
-			this.deviceType = deviceType;
-
-			// Set up session reference
-			this.sessionRef = firebaseDatabase.ref(
-				this.database,
-				`sessions/${sessionId}`
-			);
-
-			// Set up connection status listener
-			this.setupConnectionListeners(firebaseDatabase);
-
-			this.isInitialized = true;
-			console.log(
-				`Connection service initialized for session ${sessionId} as ${deviceType}`
-			);
+			// Set up listeners for connection changes
+			this.setupConnectionListeners(database);
 
 			// Register this device
 			await this.registerDevice();
 
-			return true;
-		} catch (error) {
-			console.error("Failed to initialize connection service:", error);
-
-			// Fallback to localStorage for same-device testing
+			// Set up localStorage fallback for testing on the same device
 			this.setupLocalStorageFallback();
 
-			return false;
-		}
-	}
+			this.isInitialized = true;
+			this.connectionStatus = "connecting";
 
-	/**
-	 * Set up a fallback using localStorage for same-device testing
-	 */
-	setupLocalStorageFallback() {
-		console.log("Setting up localStorage fallback for connection service");
-
-		// Set up interval to check localStorage
-		setInterval(() => {
-			try {
-				const data = localStorage.getItem(`cardboardhrv-${this.sessionId}`);
-				if (data) {
-					const parsedData = JSON.parse(data);
-					this.handleDataUpdate(parsedData);
-				}
-			} catch (error) {
-				console.error("Error checking localStorage:", error);
-			}
-		}, 1000);
-	}
-
-	/**
-	 * Set up connection status listeners
-	 * @param {object} firebaseDatabase - The Firebase database module
-	 */
-	setupConnectionListeners(firebaseDatabase) {
-		// Listen for connection status changes
-		const connectedRef = firebaseDatabase.ref(this.database, ".info/connected");
-		firebaseDatabase.onValue(connectedRef, (snap) => {
-			if (snap.val() === true) {
-				console.log("Connected to Firebase");
-
-				// When we disconnect, remove this device
-				firebaseDatabase
-					.onDisconnect(
-						firebaseDatabase.ref(
-							this.database,
-							`sessions/${this.sessionId}/devices/${this.deviceType}`
-						)
-					)
-					.remove();
-
-				// Update connection status
-				this.connectionStatus = "connected";
-				this.emit("connectionStatusChanged", { status: "connected" });
-			} else {
-				console.log("Disconnected from Firebase");
-				this.connectionStatus = "disconnected";
-				this.emit("connectionStatusChanged", { status: "disconnected" });
-			}
-		});
-
-		// Listen for data changes
-		firebaseDatabase.onValue(this.sessionRef, (snapshot) => {
-			const data = snapshot.val();
-			if (data) {
-				this.handleDataUpdate(data);
-			}
-		});
-	}
-
-	/**
-	 * Handle data updates from Firebase
-	 * @param {object} data - The updated data
-	 */
-	handleDataUpdate(data) {
-		// Check if both devices are connected
-		const isMobileConnected = data.devices && data.devices.mobile;
-		const isDesktopConnected = data.devices && data.devices.desktop;
-
-		if (isMobileConnected && isDesktopConnected) {
-			this.connectionStatus = "paired";
-			this.emit("devicesPaired", {
-				mobile: data.devices.mobile,
-				desktop: data.devices.desktop,
-			});
-		} else if (this.connectionStatus === "paired") {
-			this.connectionStatus = "connected";
-			this.emit("deviceDisconnected", {
-				isMobileConnected,
-				isDesktopConnected,
-			});
-		}
-
-		// Handle heart rate data
-		if (data.heartRateData) {
-			this.emit("heartRateData", data.heartRateData);
-		}
-
-		// Handle messages
-		if (data.messages) {
-			const messages = Object.values(data.messages);
-			const latestMessage = messages[messages.length - 1];
-			if (
-				latestMessage &&
-				latestMessage.timestamp > (this.lastMessageTimestamp || 0)
-			) {
-				this.lastMessageTimestamp = latestMessage.timestamp;
-				this.emit("message", latestMessage);
-			}
-		}
-	}
-
-	/**
-	 * Register this device with the session
-	 */
-	async registerDevice() {
-		if (!this.isInitialized) return false;
-
-		try {
-			const deviceData = {
-				type: this.deviceType,
-				userAgent: navigator.userAgent,
-				timestamp: Date.now(),
-			};
-
-			if (this.firebase) {
-				// Use Firebase
-				const firebaseDatabase = await import(
-					"https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"
-				);
-				firebaseDatabase.set(
-					firebaseDatabase.ref(
-						this.database,
-						`sessions/${this.sessionId}/devices/${this.deviceType}`
-					),
-					deviceData
-				);
-			} else {
-				// Use localStorage fallback
-				const sessionData = JSON.parse(
-					localStorage.getItem(`cardboardhrv-${this.sessionId}`) || "{}"
-				);
-				if (!sessionData.devices) sessionData.devices = {};
-				sessionData.devices[this.deviceType] = deviceData;
-				localStorage.setItem(
-					`cardboardhrv-${this.sessionId}`,
-					JSON.stringify(sessionData)
-				);
-			}
-
-			console.log(
-				`Registered ${this.deviceType} device for session ${this.sessionId}`
-			);
-			return true;
-		} catch (error) {
-			console.error("Failed to register device:", error);
-			return false;
-		}
-	}
-
-	/**
-	 * Send heart rate data
-	 * @param {object} data - The heart rate data to send
-	 */
-	async sendHeartRateData(data) {
-		if (!this.isInitialized) return false;
-
-		try {
-			const heartRateData = {
-				...data,
-				timestamp: Date.now(),
+			// Emit connection status change
+			this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+				status: this.connectionStatus,
+				sessionId: this.sessionId,
 				deviceType: this.deviceType,
-			};
+				deviceId: this.deviceId,
+			});
 
-			if (this.firebase) {
-				// Use Firebase
-				const firebaseDatabase = await import(
-					"https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"
-				);
-				firebaseDatabase.set(
-					firebaseDatabase.ref(
-						this.database,
-						`sessions/${this.sessionId}/heartRateData`
-					),
-					heartRateData
-				);
-			} else {
-				// Use localStorage fallback
-				const sessionData = JSON.parse(
-					localStorage.getItem(`cardboardhrv-${this.sessionId}`) || "{}"
-				);
-				sessionData.heartRateData = heartRateData;
-				localStorage.setItem(
-					`cardboardhrv-${this.sessionId}`,
-					JSON.stringify(sessionData)
-				);
-			}
-
+			this.log("Connection service initialized successfully");
 			return true;
 		} catch (error) {
-			console.error("Failed to send heart rate data:", error);
+			console.error("Error initializing connection service:", error);
 			return false;
 		}
 	}
 
-	/**
-	 * Send a message to the other device
-	 * @param {string} message - The message to send
-	 */
-	async sendMessage(message) {
-		if (!this.isInitialized) return false;
+	setupLocalStorageFallback() {
+		// This is a fallback mechanism for testing on the same device
+		// It uses localStorage to communicate between tabs
+
+		// Listen for storage events
+		window.addEventListener("storage", (event) => {
+			if (event.key === `cardboardhrv-${this.sessionId}`) {
+				try {
+					const data = JSON.parse(event.newValue);
+					if (data && data.type) {
+						this.handleDataUpdate(data);
+					}
+				} catch (error) {
+					console.error("Error parsing localStorage data:", error);
+				}
+			}
+		});
+
+		this.log("Local storage fallback set up");
+	}
+
+	setupConnectionListeners(firebaseDatabase) {
+		// Set up listeners for session data
+		const sessionRef = ref(firebaseDatabase, `sessions/${this.sessionId}`);
+
+		onValue(sessionRef, (snapshot) => {
+			const data = snapshot.val();
+			this.log("Session data updated:", data);
+
+			if (!data) {
+				// Session doesn't exist yet, create it
+				set(sessionRef, {
+					created: Date.now(),
+					lastUpdated: Date.now(),
+				});
+				return;
+			}
+
+			// Check if both devices are connected
+			if (data.devices) {
+				const devices = Object.values(data.devices);
+				const mobileDevice = devices.find((d) => d.deviceType === "mobile");
+				const desktopDevice = devices.find((d) => d.deviceType === "desktop");
+
+				if (mobileDevice && desktopDevice) {
+					// Both devices are connected, emit paired event if not already paired
+					if (this.connectionStatus !== "connected") {
+						this.connectionStatus = "connected";
+						this.pairedDeviceId =
+							this.deviceType === "mobile"
+								? desktopDevice.deviceId
+								: mobileDevice.deviceId;
+
+						this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+							status: this.connectionStatus,
+							sessionId: this.sessionId,
+						});
+
+						this.emit(EVENT_TYPES.DEVICES_PAIRED, {
+							sessionId: this.sessionId,
+							mobileDeviceId: mobileDevice.deviceId,
+							desktopDeviceId: desktopDevice.deviceId,
+							timestamp: Date.now(),
+						});
+
+						this.log(
+							"Devices paired:",
+							mobileDevice.deviceId,
+							desktopDevice.deviceId
+						);
+					}
+				}
+			}
+
+			// Check for heart rate data
+			if (data.heartRateData && this.deviceType === "desktop") {
+				const latestData = data.heartRateData;
+				this.emit(EVENT_TYPES.HEART_RATE_DATA, latestData);
+			}
+
+			// Check for messages
+			if (data.messages) {
+				const messages = Object.values(data.messages);
+				const latestMessage = messages[messages.length - 1];
+
+				if (
+					latestMessage &&
+					latestMessage.timestamp > (this.lastMessageTimestamp || 0)
+				) {
+					this.lastMessageTimestamp = latestMessage.timestamp;
+
+					// Only process messages intended for this device or broadcast messages
+					if (
+						!latestMessage.targetDeviceId ||
+						latestMessage.targetDeviceId === this.deviceId
+					) {
+						this.emit(EVENT_TYPES.MESSAGE, {
+							text: latestMessage.text,
+							fromDeviceId: latestMessage.fromDeviceId,
+							timestamp: latestMessage.timestamp,
+						});
+					}
+				}
+			}
+		});
+
+		this.log("Connection listeners set up");
+	}
+
+	handleDataUpdate(data) {
+		this.log("Handling data update:", data);
+
+		switch (data.type) {
+			case "heartRateData":
+				if (this.deviceType === "desktop") {
+					this.emit(EVENT_TYPES.HEART_RATE_DATA, data);
+				}
+				break;
+
+			case "message":
+				this.emit(EVENT_TYPES.MESSAGE, {
+					text: data.text,
+					fromDeviceId: data.fromDeviceId,
+					timestamp: data.timestamp,
+				});
+				break;
+
+			case "connectionStatus":
+				if (data.status === "disconnected" && data.deviceId !== this.deviceId) {
+					// The other device disconnected
+					this.connectionStatus = "disconnected";
+					this.pairedDeviceId = null;
+
+					this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+						status: this.connectionStatus,
+						sessionId: this.sessionId,
+					});
+
+					this.emit(EVENT_TYPES.DEVICE_DISCONNECTED, {
+						deviceId: data.deviceId,
+						timestamp: data.timestamp,
+					});
+				} else if (
+					data.status === "connecting" &&
+					data.deviceId !== this.deviceId
+				) {
+					// The other device is trying to connect
+					this.log("Other device is connecting:", data.deviceId);
+				}
+				break;
+
+			default:
+				this.log("Unknown data type:", data.type);
+		}
+	}
+
+	async registerDevice() {
+		this.log("Registering device:", this.deviceId, this.deviceType);
 
 		try {
+			// Register this device in the session
+			const deviceRef = ref(
+				database,
+				`sessions/${this.sessionId}/devices/${this.deviceId}`
+			);
+
+			await set(deviceRef, {
+				deviceId: this.deviceId,
+				deviceType: this.deviceType,
+				lastSeen: Date.now(),
+				userAgent: navigator.userAgent,
+				connectionStatus: "online",
+			});
+
+			// Set up a presence system to detect when devices go offline
+			const connectedRef = ref(database, ".info/connected");
+
+			onValue(connectedRef, (snapshot) => {
+				if (snapshot.val() === true) {
+					// We're connected to Firebase
+
+					// When this client disconnects, remove the device
+					const deviceStatusRef = ref(
+						database,
+						`sessions/${this.sessionId}/devices/${this.deviceId}/connectionStatus`
+					);
+
+					// Set the device status to 'offline' when the client disconnects
+					update(deviceRef, {
+						lastSeen: Date.now(),
+						connectionStatus: "online",
+					});
+
+					// Set up a disconnect handler
+					onValue(deviceStatusRef, () => {
+						update(deviceRef, {
+							lastSeen: Date.now(),
+							connectionStatus: "online",
+						});
+					});
+				}
+			});
+
+			this.log("Device registered successfully");
+			return true;
+		} catch (error) {
+			console.error("Error registering device:", error);
+			return false;
+		}
+	}
+
+	async sendHeartRateData(data) {
+		if (!this.isInitialized) {
+			console.error("Connection service not initialized");
+			return false;
+		}
+
+		if (this.deviceType !== "mobile") {
+			console.error("Only mobile devices can send heart rate data");
+			return false;
+		}
+
+		try {
+			// Send heart rate data to Firebase
+			const heartRateRef = ref(
+				database,
+				`sessions/${this.sessionId}/heartRateData`
+			);
+
+			const heartRateData = {
+				heartRate: data.heartRate,
+				timestamp: data.timestamp || Date.now(),
+				rawData: data.rawData,
+				deviceId: this.deviceId,
+			};
+
+			await set(heartRateRef, heartRateData);
+
+			// Also use localStorage as a fallback
+			try {
+				localStorage.setItem(
+					`cardboardhrv-${this.sessionId}`,
+					JSON.stringify({
+						type: "heartRateData",
+						...heartRateData,
+					})
+				);
+
+				// Dispatch a storage event to notify other tabs
+				window.dispatchEvent(
+					new StorageEvent("storage", {
+						key: `cardboardhrv-${this.sessionId}`,
+						newValue: JSON.stringify({
+							type: "heartRateData",
+							...heartRateData,
+						}),
+					})
+				);
+			} catch (e) {
+				console.error("Failed to use localStorage for heart rate data:", e);
+			}
+
+			this.log("Heart rate data sent:", heartRateData);
+			return true;
+		} catch (error) {
+			console.error("Error sending heart rate data:", error);
+			return false;
+		}
+	}
+
+	async sendMessage(message) {
+		if (!this.isInitialized) {
+			console.error("Connection service not initialized");
+			return false;
+		}
+
+		try {
+			// Generate a unique message ID
+			const messageId = `${Date.now()}-${Math.random()
+				.toString(36)
+				.substring(2, 9)}`;
+
+			// Send message to Firebase
+			const messageRef = ref(
+				database,
+				`sessions/${this.sessionId}/messages/${messageId}`
+			);
+
 			const messageData = {
 				text: message,
+				fromDeviceId: this.deviceId,
+				fromDeviceType: this.deviceType,
 				timestamp: Date.now(),
-				deviceType: this.deviceType,
+				// If we have a paired device, target the message to that device
+				targetDeviceId: this.pairedDeviceId || null,
 			};
 
-			if (this.firebase) {
-				// Use Firebase
-				const firebaseDatabase = await import(
-					"https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"
-				);
-				const newMessageRef = firebaseDatabase.push(
-					firebaseDatabase.ref(
-						this.database,
-						`sessions/${this.sessionId}/messages`
-					)
-				);
-				firebaseDatabase.set(newMessageRef, messageData);
-			} else {
-				// Use localStorage fallback
-				const sessionData = JSON.parse(
-					localStorage.getItem(`cardboardhrv-${this.sessionId}`) || "{}"
-				);
-				if (!sessionData.messages) sessionData.messages = [];
-				sessionData.messages.push(messageData);
+			await set(messageRef, messageData);
+
+			// Also use localStorage as a fallback
+			try {
 				localStorage.setItem(
 					`cardboardhrv-${this.sessionId}`,
-					JSON.stringify(sessionData)
+					JSON.stringify({
+						type: "message",
+						...messageData,
+					})
 				);
+
+				// Dispatch a storage event to notify other tabs
+				window.dispatchEvent(
+					new StorageEvent("storage", {
+						key: `cardboardhrv-${this.sessionId}`,
+						newValue: JSON.stringify({
+							type: "message",
+							...messageData,
+						}),
+					})
+				);
+			} catch (e) {
+				console.error("Failed to use localStorage for message:", e);
 			}
 
+			this.log("Message sent:", messageData);
 			return true;
 		} catch (error) {
-			console.error("Failed to send message:", error);
+			console.error("Error sending message:", error);
 			return false;
 		}
 	}
 
-	/**
-	 * Check if both devices are connected
-	 * @returns {boolean} - Whether both devices are connected
-	 */
 	areBothDevicesConnected() {
-		return this.connectionStatus === "paired";
+		return (
+			this.connectionStatus === "connected" && this.pairedDeviceId !== null
+		);
 	}
 
-	/**
-	 * Register an event listener
-	 * @param {string} event - The event to listen for
-	 * @param {function} callback - The callback function
-	 */
 	on(event, callback) {
 		if (!this.eventListeners[event]) {
 			this.eventListeners[event] = [];
 		}
+
 		this.eventListeners[event].push(callback);
+		this.log(
+			`Added listener for ${event}, total listeners: ${this.eventListeners[event].length}`
+		);
+
+		return () => this.off(event, callback);
 	}
 
-	/**
-	 * Remove an event listener
-	 * @param {string} event - The event to remove the listener from
-	 * @param {function} callback - The callback function to remove
-	 */
 	off(event, callback) {
-		if (!this.eventListeners[event]) return;
-
-		const index = this.eventListeners[event].indexOf(callback);
-		if (index !== -1) {
-			this.eventListeners[event].splice(index, 1);
+		if (!this.eventListeners[event]) {
+			return;
 		}
+
+		this.eventListeners[event] = this.eventListeners[event].filter(
+			(cb) => cb !== callback
+		);
+		this.log(
+			`Removed listener for ${event}, remaining listeners: ${this.eventListeners[event].length}`
+		);
 	}
 
-	/**
-	 * Emit an event
-	 * @param {string} event - The event to emit
-	 * @param {object} data - The data to emit with the event
-	 */
 	emit(event, data) {
-		if (!this.eventListeners[event]) return;
-
-		for (const callback of this.eventListeners[event]) {
-			callback(data);
+		if (!this.eventListeners[event]) {
+			return;
 		}
+
+		this.log(`Emitting ${event} with data:`, data);
+
+		this.eventListeners[event].forEach((callback) => {
+			try {
+				callback(data);
+			} catch (error) {
+				console.error(`Error in ${event} listener:`, error);
+			}
+		});
 	}
 
-	/**
-	 * Disconnect from the session
-	 */
 	async disconnect() {
-		if (!this.isInitialized) return;
+		if (!this.isInitialized) {
+			return;
+		}
+
+		this.log("Disconnecting from session:", this.sessionId);
 
 		try {
-			if (this.firebase) {
-				// Use Firebase
-				const firebaseDatabase = await import(
-					"https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"
+			// Update device status
+			if (this.sessionId && this.deviceId) {
+				const deviceRef = ref(
+					database,
+					`sessions/${this.sessionId}/devices/${this.deviceId}`
 				);
-				firebaseDatabase.remove(
-					firebaseDatabase.ref(
-						this.database,
-						`sessions/${this.sessionId}/devices/${this.deviceType}`
-					)
-				);
-			} else {
-				// Use localStorage fallback
-				const sessionData = JSON.parse(
-					localStorage.getItem(`cardboardhrv-${this.sessionId}`) || "{}"
-				);
-				if (sessionData.devices) {
-					delete sessionData.devices[this.deviceType];
-					localStorage.setItem(
-						`cardboardhrv-${this.sessionId}`,
-						JSON.stringify(sessionData)
-					);
-				}
+				await update(deviceRef, {
+					lastSeen: Date.now(),
+					connectionStatus: "offline",
+				});
+
+				// After a delay, remove the device from the session
+				setTimeout(async () => {
+					try {
+						await remove(deviceRef);
+					} catch (e) {
+						console.error("Error removing device from session:", e);
+					}
+				}, 1000);
 			}
 
-			this.isInitialized = false;
+			// Reset state
 			this.connectionStatus = "disconnected";
-			this.emit("connectionStatusChanged", { status: "disconnected" });
+			this.pairedDeviceId = null;
+			this.isInitialized = false;
 
-			console.log(
-				`Disconnected ${this.deviceType} device from session ${this.sessionId}`
-			);
+			// Emit disconnection event
+			this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+				status: "disconnected",
+				sessionId: this.sessionId,
+				deviceId: this.deviceId,
+				timestamp: Date.now(),
+			});
+
+			this.log("Disconnected from session");
+			return true;
 		} catch (error) {
-			console.error("Failed to disconnect:", error);
+			console.error("Error disconnecting from session:", error);
+			return false;
+		}
+	}
+
+	generateDeviceId() {
+		// Try to get existing device ID from localStorage
+		try {
+			const storedDeviceId = localStorage.getItem("cardboardhrv-device-id");
+			if (storedDeviceId) {
+				return storedDeviceId;
+			}
+		} catch (e) {
+			console.error("Failed to retrieve device ID from localStorage:", e);
+		}
+
+		// Generate a new device ID
+		const deviceId = `${Date.now()}-${Math.random()
+			.toString(36)
+			.substring(2, 9)}`;
+
+		// Store it in localStorage for future use
+		try {
+			localStorage.setItem("cardboardhrv-device-id", deviceId);
+		} catch (e) {
+			console.error("Failed to store device ID in localStorage:", e);
+		}
+
+		return deviceId;
+	}
+
+	log(...args) {
+		if (this.debug) {
+			console.log(`[ConnectionService]`, ...args);
 		}
 	}
 }
