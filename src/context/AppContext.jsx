@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+	createContext,
+	useContext,
+	useState,
+	useEffect,
+	useCallback,
+	useRef,
+} from "react";
 import connectionService from "../utils/connectionService";
 
 const AppContext = createContext();
@@ -19,50 +26,38 @@ export function AppProvider({ children }) {
 		lfhf: 0,
 	});
 	const [sessionId, setSessionId] = useState(() => {
-		// Initialize sessionId from localStorage
 		return localStorage.getItem("cardboardhrv-session-id") || "";
 	});
-	const [connectionStatus, setConnectionStatus] = useState("disconnected");
-	const [deviceInfo, setDeviceInfo] = useState(null);
+	const [connectionStatus, setConnectionStatus] = useState(() => {
+		return (
+			localStorage.getItem("cardboardhrv-connection-status") || "disconnected"
+		);
+	});
+	const [deviceInfo, setDeviceInfo] = useState(() => {
+		const stored = localStorage.getItem("cardboardhrv-device-info");
+		return stored ? JSON.parse(stored) : null;
+	});
 	const [cameraFrame, setCameraFrame] = useState(null);
 	const [lastFrameTime, setLastFrameTime] = useState(null);
 	const [isRecording, setIsRecording] = useState(false);
 
-	// Effect to handle initial connection setup
-	useEffect(() => {
-		if (sessionId) {
-			// Determine device type from URL
-			const isMobilePath = window.location.pathname.includes("/mobile");
-			const deviceType = isMobilePath ? "mobile" : "desktop";
+	// Refs to prevent duplicate event listeners
+	const eventListenersSet = useRef(false);
+	const initializationInProgress = useRef(false);
 
-			// Attempt to reconnect with stored session
-			initializeConnection(sessionId, deviceType);
-		}
-
-		// Cleanup on unmount
-		return () => {
-			cleanup();
-		};
-	}, []);
-
-	// Handle connection status changes
-	const handleConnectionStatusChanged = (data) => {
+	// Memoize event handlers to prevent recreating them on each render
+	const handleConnectionStatusChanged = useCallback((data) => {
 		setConnectionStatus(data.status);
 		setIsConnected(data.status === "connected");
-
-		// Store connection status in localStorage
 		localStorage.setItem("cardboardhrv-connection-status", data.status);
-	};
+	}, []);
 
-	// Handle devices paired event
-	const handleDevicesPaired = (data) => {
+	const handleDevicesPaired = useCallback((data) => {
 		setDeviceInfo(data);
-		// Store device info in localStorage
 		localStorage.setItem("cardboardhrv-device-info", JSON.stringify(data));
-	};
+	}, []);
 
-	// Handle heart rate data
-	const handleHeartRateData = (data) => {
+	const handleHeartRateData = useCallback((data) => {
 		setCurrentHeartRate(data.heartRate);
 		setHeartRateData((prev) => {
 			const newData = [
@@ -72,45 +67,40 @@ export function AppProvider({ children }) {
 					value: data.heartRate,
 				},
 			];
-			return newData.slice(-60); // Keep last 60 data points
+			return newData.slice(-60);
 		});
 
-		// Calculate HRV metrics
-		if (heartRateData.length > 1) {
-			const lastHR = heartRateData[heartRateData.length - 1].value;
-			const currentHR = data.heartRate;
-			const lastRR = 60000 / lastHR;
-			const currentRR = 60000 / currentHR;
-			const diff = Math.abs(currentRR - lastRR);
-			const hrv = Math.sqrt(diff * diff);
+		setHrvMetrics((prev) => {
+			if (prev.value) {
+				const lastHR = prev.value;
+				const currentHR = data.heartRate;
+				const lastRR = 60000 / lastHR;
+				const currentRR = 60000 / currentHR;
+				const diff = Math.abs(currentRR - lastRR);
+				const hrv = Math.sqrt(diff * diff);
+				return { ...prev, rmssd: Math.round(hrv) };
+			}
+			return prev;
+		});
+	}, []);
 
-			setHrvMetrics((prev) => ({
-				...prev,
-				rmssd: Math.round(hrv),
-			}));
-		}
-	};
-
-	// Handle camera frame data
-	const handleCameraFrame = (data) => {
+	const handleCameraFrame = useCallback((data) => {
 		if (data.imageData) {
 			setCameraFrame(data.imageData);
 			setLastFrameTime(data.timestamp);
 			setIsRecording(true);
 
-			// Reset recording status if no frames received for 5 seconds
 			clearTimeout(window.recordingTimeout);
 			window.recordingTimeout = setTimeout(() => {
 				setIsRecording(false);
 			}, 5000);
 		}
-	};
+	}, []);
 
-	// Initialize connection service
-	const initializeConnection = async (newSessionId, deviceType) => {
-		if (!newSessionId) return false;
+	// Setup event listeners once
+	const setupEventListeners = useCallback(() => {
+		if (eventListenersSet.current) return;
 
-		// Set up event listeners before initializing
 		connectionService.on(
 			"connectionStatusChanged",
 			handleConnectionStatusChanged
@@ -118,33 +108,39 @@ export function AppProvider({ children }) {
 		connectionService.on("devicesPaired", handleDevicesPaired);
 		connectionService.on("heartRateData", handleHeartRateData);
 
-		const success = await connectionService.initialize(
-			newSessionId,
-			deviceType
-		);
-		if (success) {
-			setSessionId(newSessionId);
-			localStorage.setItem("cardboardhrv-session-id", newSessionId);
+		eventListenersSet.current = true;
+	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
 
-			// Try to restore device info from localStorage
-			const storedDeviceInfo = localStorage.getItem("cardboardhrv-device-info");
-			if (storedDeviceInfo) {
-				try {
-					const parsedDeviceInfo = JSON.parse(storedDeviceInfo);
-					setDeviceInfo(parsedDeviceInfo);
-				} catch (error) {
-					console.error("Error parsing stored device info:", error);
+	// Initialize connection service
+	const initializeConnection = useCallback(
+		async (newSessionId, deviceType) => {
+			if (!newSessionId || initializationInProgress.current) return false;
+
+			try {
+				initializationInProgress.current = true;
+				setupEventListeners();
+
+				const success = await connectionService.initialize(
+					newSessionId,
+					deviceType
+				);
+				if (success) {
+					setSessionId(newSessionId);
+					localStorage.setItem("cardboardhrv-session-id", newSessionId);
+					return true;
 				}
+				return false;
+			} finally {
+				initializationInProgress.current = false;
 			}
-
-			return true;
-		}
-		return false;
-	};
+		},
+		[setupEventListeners]
+	);
 
 	// Clean up function
-	const cleanup = () => {
-		// Remove event listeners
+	const cleanup = useCallback(() => {
+		if (!eventListenersSet.current) return;
+
 		connectionService.off(
 			"connectionStatusChanged",
 			handleConnectionStatusChanged
@@ -152,49 +148,36 @@ export function AppProvider({ children }) {
 		connectionService.off("devicesPaired", handleDevicesPaired);
 		connectionService.off("heartRateData", handleHeartRateData);
 
-		// Clear timeouts
 		clearTimeout(window.recordingTimeout);
-	};
+		eventListenersSet.current = false;
+	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
+
+	// Initial connection setup
+	useEffect(() => {
+		if (sessionId && !eventListenersSet.current) {
+			const isMobilePath = window.location.pathname.includes("/mobile");
+			const deviceType = isMobilePath ? "mobile" : "desktop";
+			initializeConnection(sessionId, deviceType);
+		}
+
+		return cleanup;
+	}, [sessionId, initializeConnection, cleanup]);
 
 	// Handle visibility change
 	useEffect(() => {
 		const handleVisibilityChange = () => {
-			if (!document.hidden && sessionId) {
-				// Determine device type from URL
+			if (!document.hidden && sessionId && !eventListenersSet.current) {
 				const isMobilePath = window.location.pathname.includes("/mobile");
 				const deviceType = isMobilePath ? "mobile" : "desktop";
-
-				// Attempt to reconnect
 				initializeConnection(sessionId, deviceType);
 			}
 		};
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
-
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
-	}, [sessionId]);
-
-	// Handle beforeunload
-	useEffect(() => {
-		const handleBeforeUnload = () => {
-			// Store current state in localStorage
-			if (deviceInfo) {
-				localStorage.setItem(
-					"cardboardhrv-device-info",
-					JSON.stringify(deviceInfo)
-				);
-			}
-			localStorage.setItem("cardboardhrv-connection-status", connectionStatus);
-		};
-
-		window.addEventListener("beforeunload", handleBeforeUnload);
-
-		return () => {
-			window.removeEventListener("beforeunload", handleBeforeUnload);
-		};
-	}, [deviceInfo, connectionStatus]);
+	}, [sessionId, initializeConnection]);
 
 	const value = {
 		isConnected,

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import connectionService from "../utils/connectionService";
@@ -10,6 +10,7 @@ function ConnectMobile() {
 	const canvasRef = useRef(null);
 	const processingRef = useRef(false);
 	const streamRef = useRef(null);
+	const frameProcessingRef = useRef(null);
 
 	const {
 		sessionId,
@@ -40,7 +41,7 @@ function ConnectMobile() {
 			// If we were previously recording, try to restore camera access
 			const wasRecording =
 				localStorage.getItem("cardboardhrv-was-recording") === "true";
-			if (wasRecording) {
+			if (wasRecording && connectionStatus === "connected") {
 				requestCameraPermission();
 			}
 		};
@@ -54,7 +55,12 @@ function ConnectMobile() {
 	}, [searchParams, navigate, initializeConnection, cleanup]);
 
 	// Stop camera function
-	const stopCamera = () => {
+	const stopCamera = useCallback(() => {
+		if (frameProcessingRef.current) {
+			cancelAnimationFrame(frameProcessingRef.current);
+			frameProcessingRef.current = null;
+		}
+
 		if (streamRef.current) {
 			const tracks = streamRef.current.getTracks();
 			tracks.forEach((track) => track.stop());
@@ -64,10 +70,93 @@ function ConnectMobile() {
 			videoRef.current.srcObject = null;
 		}
 		localStorage.setItem("cardboardhrv-was-recording", "false");
-	};
+		processingRef.current = false;
+	}, []);
+
+	// Process frame function
+	const processFrame = useCallback(() => {
+		if (
+			!videoRef.current ||
+			!videoRef.current.videoWidth ||
+			processingRef.current
+		)
+			return;
+
+		const video = videoRef.current;
+		const canvas = canvasRef.current;
+		const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+		processingRef.current = true;
+
+		try {
+			// Set canvas dimensions to match video
+			canvas.width = video.videoWidth;
+			canvas.height = video.videoHeight;
+
+			// Draw the current video frame
+			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+			// Get image data for heart rate processing
+			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			const data = imageData.data;
+
+			// Process red channel for PPG signal
+			let redSum = 0;
+			for (let i = 0; i < data.length; i += 4) {
+				redSum += data[i];
+			}
+			const redAvg = redSum / (data.length / 4);
+
+			// Send heart rate data
+			const simulatedHeartRate = Math.floor(60 + Math.random() * 30);
+			connectionService.sendHeartRateData({
+				heartRate: simulatedHeartRate,
+				timestamp: Date.now(),
+				rawData: redAvg,
+			});
+
+			// Send camera frame (every ~10 frames)
+			if (Math.random() < 0.1) {
+				const smallCanvas = document.createElement("canvas");
+				const smallCtx = smallCanvas.getContext("2d");
+				smallCanvas.width = 160;
+				smallCanvas.height = 120;
+				smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
+				const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.5);
+				connectionService.sendCameraFrame(frameDataUrl);
+			}
+
+			processingRef.current = false;
+			if (streamRef.current) {
+				frameProcessingRef.current = requestAnimationFrame(processFrame);
+			}
+		} catch (error) {
+			console.error("Error processing frame:", error);
+			processingRef.current = false;
+		}
+	}, []);
+
+	// Function to start streaming camera data
+	const startStreaming = useCallback(
+		(stream) => {
+			if (!stream || !videoRef.current || !canvasRef.current) return;
+
+			const video = videoRef.current;
+			video.srcObject = stream;
+			streamRef.current = stream;
+
+			video.onloadedmetadata = () => {
+				video.play();
+				processFrame();
+			};
+		},
+		[processFrame]
+	);
 
 	// Function to explicitly request camera permission
-	const requestCameraPermission = async () => {
+	const requestCameraPermission = useCallback(async () => {
+		if (streamRef.current) return true; // Already have camera access
+
 		try {
 			console.log("Requesting camera permission...");
 			const stream = await navigator.mediaDevices.getUserMedia({
@@ -75,119 +164,40 @@ function ConnectMobile() {
 				audio: false,
 			});
 
-			streamRef.current = stream;
-			if (videoRef.current) {
-				videoRef.current.srcObject = stream;
-				startStreaming(stream);
-				localStorage.setItem("cardboardhrv-was-recording", "true");
-			}
-
+			startStreaming(stream);
+			localStorage.setItem("cardboardhrv-was-recording", "true");
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
 			localStorage.setItem("cardboardhrv-was-recording", "false");
 			return false;
 		}
-	};
+	}, [startStreaming]);
 
-	// Function to start streaming camera data
-	const startStreaming = (stream) => {
-		if (!stream || !videoRef.current || !canvasRef.current) return;
-
-		const video = videoRef.current;
-		const canvas = canvasRef.current;
-		const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-		const processFrame = () => {
-			if (!video || !video.videoWidth || processingRef.current) return;
-
-			processingRef.current = true;
-
-			try {
-				// Set canvas dimensions to match video
-				canvas.width = video.videoWidth;
-				canvas.height = video.videoHeight;
-
-				// Draw the current video frame
-				ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-				// Get image data for heart rate processing
-				const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-				const data = imageData.data;
-
-				// Process red channel for PPG signal
-				let redSum = 0;
-				for (let i = 0; i < data.length; i += 4) {
-					redSum += data[i];
-				}
-				const redAvg = redSum / (data.length / 4);
-
-				// Send heart rate data
-				const simulatedHeartRate = Math.floor(60 + Math.random() * 30);
-				connectionService.sendHeartRateData({
-					heartRate: simulatedHeartRate,
-					timestamp: Date.now(),
-					rawData: redAvg,
-				});
-
-				// Send camera frame (every ~10 frames)
-				if (Math.random() < 0.1) {
-					const smallCanvas = document.createElement("canvas");
-					const smallCtx = smallCanvas.getContext("2d");
-					smallCanvas.width = 160;
-					smallCanvas.height = 120;
-					smallCtx.drawImage(
-						video,
-						0,
-						0,
-						smallCanvas.width,
-						smallCanvas.height
-					);
-					const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.5);
-					connectionService.sendCameraFrame(frameDataUrl);
-				}
-
-				processingRef.current = false;
-				if (streamRef.current) {
-					// Only continue if stream is active
-					requestAnimationFrame(processFrame);
-				}
-			} catch (error) {
-				console.error("Error processing frame:", error);
-				processingRef.current = false;
-			}
-		};
-
-		video.onloadedmetadata = () => {
-			video.play();
-			processFrame();
-		};
-	};
-
-	const handleGoBack = () => {
+	const handleGoBack = useCallback(() => {
 		stopCamera();
 		cleanup();
 		navigate("/");
-	};
+	}, [stopCamera, cleanup, navigate]);
 
 	// Handle visibility change
 	useEffect(() => {
 		const handleVisibilityChange = () => {
 			if (document.hidden) {
-				// Page is hidden, stop camera to save resources
 				stopCamera();
-			} else if (connectionStatus === "connected") {
-				// Page is visible again and we're connected, restart camera
+			} else if (
+				connectionStatus === "connected" &&
+				localStorage.getItem("cardboardhrv-was-recording") === "true"
+			) {
 				requestCameraPermission();
 			}
 		};
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
-
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
-	}, [connectionStatus]);
+	}, [connectionStatus, stopCamera, requestCameraPermission]);
 
 	return (
 		<div className="connect-mobile">
