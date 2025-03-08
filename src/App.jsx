@@ -5,12 +5,13 @@ import LiveMonitor from "./components/LiveMonitor";
 import ConnectPhone from "./components/ConnectPhone";
 import ProjectInfo from "./components/ProjectInfo";
 import ConnectMobile from "./components/ConnectMobile";
-import { AppProvider } from "./context/AppContext";
+import { AppContextProvider } from "./context/AppContext";
 import "./App.css";
+import "./styles/App.css";
 
 function App() {
 	return (
-		<AppProvider>
+		<AppContextProvider.AppProvider>
 			<Router>
 				<div className="app-container">
 					<Header />
@@ -144,7 +145,7 @@ function App() {
 					<Footer />
 				</div>
 			</Router>
-		</AppProvider>
+		</AppContextProvider.AppProvider>
 	);
 }
 

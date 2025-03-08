@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { useAppContext } from "../context/AppContext";
+import { AppContextProvider } from "../context/AppContext";
 import connectionService from "../utils/connectionService";
 
 function ConnectMobile() {
@@ -22,7 +22,7 @@ function ConnectMobile() {
 		cleanup,
 		handleCameraFrame,
 		syncRecordingStatus,
-	} = useAppContext();
+	} = AppContextProvider.useAppContext();
 
 	// Initialize connection service when component mounts
 	useEffect(() => {

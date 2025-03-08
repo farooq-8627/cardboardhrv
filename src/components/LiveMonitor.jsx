@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import connectionService from "../utils/connectionService";
-import { useAppContext } from "../context/AppContext";
+import { AppContextProvider } from "../context/AppContext";
 import { Line } from "react-chartjs-2";
 import {
 	Chart as ChartJS,
@@ -44,7 +44,7 @@ function LiveMonitor() {
 		initializeConnection,
 		handleCameraFrame,
 		cleanup,
-	} = useAppContext();
+	} = AppContextProvider.useAppContext();
 
 	// Initialize connection service when component mounts
 	useEffect(() => {
@@ -128,11 +128,15 @@ function LiveMonitor() {
 
 	// Chart data
 	const heartRateChartData = {
-		labels: heartRateData.map((_, index) => index.toString()),
+		labels: Array.isArray(heartRateData)
+			? heartRateData.map((_, index) => index.toString())
+			: [],
 		datasets: [
 			{
 				label: "Heart Rate (BPM)",
-				data: heartRateData.map((data) => data.value),
+				data: Array.isArray(heartRateData)
+					? heartRateData.map((data) => data.value)
+					: [],
 				borderColor: "rgb(255, 99, 132)",
 				backgroundColor: "rgba(255, 99, 132, 0.5)",
 				tension: 0.3,
@@ -141,11 +145,15 @@ function LiveMonitor() {
 	};
 
 	const hrvChartData = {
-		labels: heartRateData.map((_, index) => index.toString()),
+		labels: Array.isArray(heartRateData)
+			? heartRateData.map((_, index) => index.toString())
+			: [],
 		datasets: [
 			{
 				label: "HRV (ms)",
-				data: heartRateData.map(() => hrvMetrics.rmssd),
+				data: Array.isArray(heartRateData)
+					? heartRateData.map(() => hrvMetrics?.rmssd || 0)
+					: [],
 				borderColor: "rgb(53, 162, 235)",
 				backgroundColor: "rgba(53, 162, 235, 0.5)",
 				tension: 0.3,
