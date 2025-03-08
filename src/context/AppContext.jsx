@@ -93,44 +93,49 @@ export function AppProvider({ children }) {
 		});
 	}, []);
 
-	const handleCameraFrame = useCallback((data) => {
-		if (data.imageData) {
-			console.log(
-				"Frame received in context:",
-				new Date(data.timestamp).toLocaleTimeString(),
-				"from device:",
-				data.deviceId
-			);
+	const handleCameraFrame = useCallback(
+		(data) => {
+			if (data.imageData) {
+				console.log(
+					"Frame received in context:",
+					new Date(data.timestamp).toLocaleTimeString(),
+					"from device:",
+					data.deviceId
+				);
 
-			// Update frame immediately
-			setCameraFrame(data.imageData);
-			setLastFrameTime(data.timestamp);
-			setIsRecording(true);
-			localStorage.setItem("cardboardhrv-was-recording", "true");
+				// Update frame immediately
+				setCameraFrame(data.imageData);
+				setLastFrameTime(data.timestamp);
+				setIsRecording(true);
+				localStorage.setItem("cardboardhrv-was-recording", "true");
 
-			// Clear existing timeout
-			if (recordingTimeoutRef.current) {
-				clearTimeout(recordingTimeoutRef.current);
-			}
-
-			// Set new timeout for 2 seconds (reduced from 5 seconds)
-			recordingTimeoutRef.current = setTimeout(() => {
-				if (!document.hidden) {
-					console.log(
-						"No frames received for 2 seconds, marking as not recording"
-					);
-					setIsRecording(false);
-					localStorage.setItem("cardboardhrv-was-recording", "false");
-					// Clear the camera frame if no new frames received
-					setCameraFrame(null);
+				// Clear existing timeout
+				if (recordingTimeoutRef.current) {
+					clearTimeout(recordingTimeoutRef.current);
 				}
-			}, 2000);
-		} else {
-			console.warn("Received camera frame data without imageData");
-			setIsRecording(false);
-			localStorage.setItem("cardboardhrv-was-recording", "false");
-		}
-	}, []);
+
+				// Set new timeout for 2 seconds
+				recordingTimeoutRef.current = setTimeout(() => {
+					if (!document.hidden) {
+						console.log(
+							"No frames received for 2 seconds, marking as not recording"
+						);
+						setIsRecording(false);
+						localStorage.setItem("cardboardhrv-was-recording", "false");
+						// Only clear the camera frame if we haven't received a new one
+						if (lastFrameTime === data.timestamp) {
+							setCameraFrame(null);
+						}
+					}
+				}, 2000);
+			} else {
+				console.warn("Received camera frame data without imageData");
+				setIsRecording(false);
+				localStorage.setItem("cardboardhrv-was-recording", "false");
+			}
+		},
+		[lastFrameTime]
+	);
 
 	// Setup event listeners once
 	const setupEventListeners = useCallback(() => {

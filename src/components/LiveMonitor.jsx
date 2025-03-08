@@ -303,6 +303,35 @@ function LiveMonitor() {
 												Frame frozen - Check mobile connection
 											</div>
 										)}
+										{isRecording && (
+											<div
+												className="recording-indicator"
+												style={{
+													position: "absolute",
+													top: "10px",
+													right: "10px",
+													backgroundColor: "rgba(220, 53, 69, 0.7)",
+													color: "white",
+													padding: "0.25rem 0.5rem",
+													borderRadius: "4px",
+													fontSize: "0.8rem",
+													display: "flex",
+													alignItems: "center",
+													gap: "4px",
+												}}
+											>
+												<div
+													style={{
+														width: "8px",
+														height: "8px",
+														borderRadius: "50%",
+														backgroundColor: "#fff",
+														animation: "pulse 1s infinite",
+													}}
+												></div>
+												REC
+											</div>
+										)}
 									</>
 								) : (
 									<div
@@ -327,36 +356,6 @@ function LiveMonitor() {
 												? "Waiting for camera feed..."
 												: "Connect your mobile device to start streaming"}
 										</p>
-									</div>
-								)}
-
-								{isRecording && (
-									<div
-										className="recording-indicator"
-										style={{
-											position: "absolute",
-											top: "10px",
-											right: "10px",
-											backgroundColor: "rgba(220, 53, 69, 0.7)",
-											color: "white",
-											padding: "0.25rem 0.5rem",
-											borderRadius: "4px",
-											fontSize: "0.8rem",
-											display: "flex",
-											alignItems: "center",
-											gap: "4px",
-										}}
-									>
-										<div
-											style={{
-												width: "8px",
-												height: "8px",
-												borderRadius: "50%",
-												backgroundColor: "#fff",
-												animation: "pulse 1s infinite",
-											}}
-										></div>
-										REC
 									</div>
 								)}
 							</div>

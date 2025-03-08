@@ -122,26 +122,33 @@ function ConnectMobile() {
 				sessionId: sessionId,
 			};
 
-			// Send via context
+			// Send via context first
 			handleCameraFrame(frameData);
 
-			// Send via Firebase
+			// Then send via Firebase
 			connectionService
 				.sendCameraFrame(frameData)
 				.then(() => {
 					console.log("Frame sent successfully");
+					setIsRecording(true); // Update recording status after successful frame send
 				})
 				.catch((error) => {
 					console.error("Error sending frame:", error);
+					setIsRecording(false); // Update recording status on error
 				});
 
 			processingRef.current = false;
+
+			// Continue processing frames if we have a stream
 			if (streamRef.current) {
 				frameProcessingRef.current = requestAnimationFrame(processFrame);
+			} else {
+				setIsRecording(false); // Update recording status if stream is gone
 			}
 		} catch (error) {
 			console.error("Error processing frame:", error);
 			processingRef.current = false;
+			setIsRecording(false); // Update recording status on error
 		}
 	}, [handleCameraFrame, sessionId]);
 
