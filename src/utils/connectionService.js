@@ -16,20 +16,31 @@ import {
 	onDisconnect,
 } from "firebase/database";
 
-// Firebase configuration - using a public Firebase project
+// Firebase configuration - using a public test project
 const firebaseConfig = {
-	apiKey: "AIzaSyBXQZx1WXP9-ZdKUU9nENGY0q9P2sCfKxE",
-	authDomain: "cardboardhrv-public.firebaseapp.com",
-	databaseURL: "https://cardboardhrv-public-default-rtdb.firebaseio.com",
-	projectId: "cardboardhrv-public",
-	storageBucket: "cardboardhrv-public.appspot.com",
-	messagingSenderId: "1082669024548",
-	appId: "1:1082669024548:web:3a5e9d8e9f9f9f9f9f9f9f",
+	apiKey: "AIzaSyDLgOEV-lfqCJbwqvXxBDl37GpMXoNR5xM",
+	authDomain: "public-test-db-f498a.firebaseapp.com",
+	databaseURL: "https://public-test-db-f498a-default-rtdb.firebaseio.com",
+	projectId: "public-test-db-f498a",
+	storageBucket: "public-test-db-f498a.appspot.com",
+	messagingSenderId: "869896918632",
+	appId: "1:869896918632:web:e0f6d0f7a6d2b6d3e0f6d0",
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+// Initialize Firebase with error handling
+let app;
+let database;
+let firebaseAvailable = false;
+
+try {
+	app = initializeApp(firebaseConfig);
+	database = getDatabase(app);
+	firebaseAvailable = true;
+	console.log("Firebase initialized successfully");
+} catch (error) {
+	console.error("Error initializing Firebase:", error);
+	firebaseAvailable = false;
+}
 
 // Event types
 const EVENT_TYPES = {
@@ -58,6 +69,129 @@ class ConnectionService {
 
 		// Debug flag
 		this.debug = true;
+
+		// Direct connection flag
+		this.useDirectConnection = !firebaseAvailable;
+
+		// Set up direct connection listeners
+		this.setupDirectConnectionListeners();
+	}
+
+	// Set up direct connection listeners using window.postMessage
+	setupDirectConnectionListeners() {
+		// Listen for messages from other windows/tabs
+		window.addEventListener("message", (event) => {
+			// Only process messages from our own origin
+			if (event.origin !== window.location.origin) return;
+
+			const data = event.data;
+			if (!data || !data.type || !data.sessionId) return;
+
+			// Only process messages for our session
+			if (this.sessionId && data.sessionId !== this.sessionId) return;
+
+			this.log("Direct connection message received:", data);
+
+			switch (data.type) {
+				case "heartRateData":
+					if (this.deviceType === "desktop") {
+						this.emit(EVENT_TYPES.HEART_RATE_DATA, data);
+					}
+					break;
+
+				case "deviceConnected":
+					if (data.deviceType !== this.deviceType) {
+						this.pairedDeviceId = data.deviceId;
+						this.connectionStatus = "connected";
+
+						this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+							status: this.connectionStatus,
+							sessionId: this.sessionId,
+						});
+
+						this.emit(EVENT_TYPES.DEVICES_PAIRED, {
+							sessionId: this.sessionId,
+							mobileDeviceId:
+								this.deviceType === "mobile" ? this.deviceId : data.deviceId,
+							desktopDeviceId:
+								this.deviceType === "desktop" ? this.deviceId : data.deviceId,
+							timestamp: Date.now(),
+						});
+
+						// Send a response to confirm the connection
+						this.sendDirectMessage({
+							type: "connectionConfirmed",
+							sessionId: this.sessionId,
+							deviceId: this.deviceId,
+							deviceType: this.deviceType,
+							timestamp: Date.now(),
+						});
+					}
+					break;
+
+				case "connectionConfirmed":
+					if (data.deviceType !== this.deviceType) {
+						this.pairedDeviceId = data.deviceId;
+						this.connectionStatus = "connected";
+
+						this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+							status: this.connectionStatus,
+							sessionId: this.sessionId,
+						});
+					}
+					break;
+
+				case "message":
+					this.emit(EVENT_TYPES.MESSAGE, {
+						text: data.text,
+						fromDeviceId: data.deviceId,
+						timestamp: data.timestamp,
+					});
+					break;
+			}
+		});
+
+		this.log("Direct connection listeners set up");
+	}
+
+	// Send a message using the direct connection
+	sendDirectMessage(data) {
+		// Try to send to all open windows
+		try {
+			// Send to parent window if we're in an iframe
+			if (window.parent && window.parent !== window) {
+				window.parent.postMessage(data, window.location.origin);
+			}
+
+			// Send to opener window if we were opened by another window
+			if (window.opener && !window.opener.closed) {
+				window.opener.postMessage(data, window.location.origin);
+			}
+
+			// Broadcast to all windows using localStorage as a communication channel
+			localStorage.setItem(
+				"cardboardhrv-broadcast",
+				JSON.stringify({
+					...data,
+					timestamp: Date.now(),
+				})
+			);
+
+			// Dispatch a storage event to notify other tabs
+			window.dispatchEvent(
+				new StorageEvent("storage", {
+					key: "cardboardhrv-broadcast",
+					newValue: JSON.stringify({
+						...data,
+						timestamp: Date.now(),
+					}),
+				})
+			);
+
+			this.log("Direct message sent:", data);
+		} catch (error) {
+			console.error("Error sending direct message:", error);
+		}
 	}
 
 	async initialize(sessionId, deviceType) {
@@ -79,28 +213,44 @@ class ConnectionService {
 		);
 
 		try {
-			// Create session reference
-			const sessionRef = ref(database, `sessions/${sessionId}`);
+			// If Firebase is available, use it
+			if (firebaseAvailable) {
+				// Create session reference
+				const sessionRef = ref(database, `sessions/${sessionId}`);
 
-			// Initialize session if it doesn't exist
-			onValue(
-				sessionRef,
-				(snapshot) => {
-					if (!snapshot.exists()) {
-						set(sessionRef, {
-							created: Date.now(),
-							lastUpdated: Date.now(),
-						});
-					}
-				},
-				{ onlyOnce: true }
-			);
+				// Initialize session if it doesn't exist
+				onValue(
+					sessionRef,
+					(snapshot) => {
+						if (!snapshot.exists()) {
+							set(sessionRef, {
+								created: Date.now(),
+								lastUpdated: Date.now(),
+							});
+						}
+					},
+					{ onlyOnce: true }
+				);
 
-			// Register this device
-			await this.registerDevice();
+				// Register this device
+				await this.registerDevice();
 
-			// Set up listeners for connection changes
-			this.setupConnectionListeners();
+				// Set up listeners for connection changes
+				this.setupConnectionListeners();
+			} else {
+				// Use direct connection
+				this.useDirectConnection = true;
+				this.log("Using direct connection (Firebase not available)");
+
+				// Announce our presence
+				this.sendDirectMessage({
+					type: "deviceConnected",
+					sessionId: this.sessionId,
+					deviceId: this.deviceId,
+					deviceType: this.deviceType,
+					timestamp: Date.now(),
+				});
+			}
 
 			this.isInitialized = true;
 			this.connectionStatus = "connecting";
@@ -113,15 +263,72 @@ class ConnectionService {
 				deviceId: this.deviceId,
 			});
 
+			// Set up a ping interval to keep the connection alive
+			this.pingInterval = setInterval(() => {
+				if (this.isInitialized) {
+					if (this.useDirectConnection) {
+						this.sendDirectMessage({
+							type: "ping",
+							sessionId: this.sessionId,
+							deviceId: this.deviceId,
+							deviceType: this.deviceType,
+							timestamp: Date.now(),
+						});
+					} else if (firebaseAvailable) {
+						// Update last seen timestamp
+						const deviceRef = ref(
+							database,
+							`sessions/${this.sessionId}/devices/${this.deviceId}`
+						);
+						update(deviceRef, {
+							lastSeen: Date.now(),
+						}).catch((error) => {
+							console.error("Error updating last seen timestamp:", error);
+						});
+					}
+				}
+			}, 30000); // Every 30 seconds
+
 			this.log("Connection service initialized successfully");
 			return true;
 		} catch (error) {
 			console.error("Error initializing connection service:", error);
+
+			// Fall back to direct connection if Firebase fails
+			if (!this.useDirectConnection) {
+				this.useDirectConnection = true;
+				this.log("Falling back to direct connection");
+
+				// Announce our presence
+				this.sendDirectMessage({
+					type: "deviceConnected",
+					sessionId: this.sessionId,
+					deviceId: this.deviceId,
+					deviceType: this.deviceType,
+					timestamp: Date.now(),
+				});
+
+				this.isInitialized = true;
+				this.connectionStatus = "connecting";
+
+				// Emit connection status change
+				this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+					status: this.connectionStatus,
+					sessionId: this.sessionId,
+					deviceType: this.deviceType,
+					deviceId: this.deviceId,
+				});
+
+				return true;
+			}
+
 			return false;
 		}
 	}
 
 	setupConnectionListeners() {
+		if (!firebaseAvailable) return;
+
 		// Set up listeners for session data
 		const sessionRef = ref(database, `sessions/${this.sessionId}`);
 
@@ -236,6 +443,8 @@ class ConnectionService {
 	}
 
 	async registerDevice() {
+		if (!firebaseAvailable) return false;
+
 		this.log("Registering device:", this.deviceId, this.deviceType);
 
 		try {
@@ -283,6 +492,20 @@ class ConnectionService {
 			return true;
 		} catch (error) {
 			console.error("Error registering device:", error);
+
+			// Fall back to direct connection
+			this.useDirectConnection = true;
+			this.log("Falling back to direct connection due to registration error");
+
+			// Announce our presence
+			this.sendDirectMessage({
+				type: "deviceConnected",
+				sessionId: this.sessionId,
+				deviceId: this.deviceId,
+				deviceType: this.deviceType,
+				timestamp: Date.now(),
+			});
+
 			return false;
 		}
 	}
@@ -298,26 +521,48 @@ class ConnectionService {
 			return false;
 		}
 
+		const heartRateData = {
+			heartRate: data.heartRate,
+			timestamp: data.timestamp || Date.now(),
+			rawData: data.rawData,
+			deviceId: this.deviceId,
+			sessionId: this.sessionId,
+			type: "heartRateData",
+		};
+
 		try {
-			// Send heart rate data to Firebase
-			const heartRateRef = ref(
-				database,
-				`sessions/${this.sessionId}/heartRateData`
-			);
+			// If using direct connection, send via postMessage
+			if (this.useDirectConnection) {
+				this.sendDirectMessage(heartRateData);
+				this.log("Heart rate data sent via direct connection:", heartRateData);
+				return true;
+			}
 
-			const heartRateData = {
-				heartRate: data.heartRate,
-				timestamp: data.timestamp || Date.now(),
-				rawData: data.rawData,
-				deviceId: this.deviceId,
-			};
+			// Otherwise, send via Firebase
+			if (firebaseAvailable) {
+				// Send heart rate data to Firebase
+				const heartRateRef = ref(
+					database,
+					`sessions/${this.sessionId}/heartRateData`
+				);
+				await set(heartRateRef, heartRateData);
 
-			await set(heartRateRef, heartRateData);
+				this.log("Heart rate data sent via Firebase:", heartRateData);
+				return true;
+			}
 
-			this.log("Heart rate data sent:", heartRateData);
-			return true;
+			return false;
 		} catch (error) {
 			console.error("Error sending heart rate data:", error);
+
+			// Fall back to direct connection
+			if (!this.useDirectConnection) {
+				this.useDirectConnection = true;
+				this.log("Falling back to direct connection for heart rate data");
+				this.sendDirectMessage(heartRateData);
+				return true;
+			}
+
 			return false;
 		}
 	}
@@ -328,33 +573,55 @@ class ConnectionService {
 			return false;
 		}
 
+		const messageData = {
+			text: message,
+			fromDeviceId: this.deviceId,
+			fromDeviceType: this.deviceType,
+			timestamp: Date.now(),
+			// If we have a paired device, target the message to that device
+			targetDeviceId: this.pairedDeviceId || null,
+			sessionId: this.sessionId,
+			type: "message",
+		};
+
 		try {
-			// Generate a unique message ID
-			const messageId = `${Date.now()}-${Math.random()
-				.toString(36)
-				.substring(2, 9)}`;
+			// If using direct connection, send via postMessage
+			if (this.useDirectConnection) {
+				this.sendDirectMessage(messageData);
+				this.log("Message sent via direct connection:", messageData);
+				return true;
+			}
 
-			// Send message to Firebase
-			const messageRef = ref(
-				database,
-				`sessions/${this.sessionId}/messages/${messageId}`
-			);
+			// Otherwise, send via Firebase
+			if (firebaseAvailable) {
+				// Generate a unique message ID
+				const messageId = `${Date.now()}-${Math.random()
+					.toString(36)
+					.substring(2, 9)}`;
 
-			const messageData = {
-				text: message,
-				fromDeviceId: this.deviceId,
-				fromDeviceType: this.deviceType,
-				timestamp: Date.now(),
-				// If we have a paired device, target the message to that device
-				targetDeviceId: this.pairedDeviceId || null,
-			};
+				// Send message to Firebase
+				const messageRef = ref(
+					database,
+					`sessions/${this.sessionId}/messages/${messageId}`
+				);
+				await set(messageRef, messageData);
 
-			await set(messageRef, messageData);
+				this.log("Message sent via Firebase:", messageData);
+				return true;
+			}
 
-			this.log("Message sent:", messageData);
-			return true;
+			return false;
 		} catch (error) {
 			console.error("Error sending message:", error);
+
+			// Fall back to direct connection
+			if (!this.useDirectConnection) {
+				this.useDirectConnection = true;
+				this.log("Falling back to direct connection for messages");
+				this.sendDirectMessage(messageData);
+				return true;
+			}
+
 			return false;
 		}
 	}
@@ -415,8 +682,25 @@ class ConnectionService {
 		this.log("Disconnecting from session:", this.sessionId);
 
 		try {
-			// Update device status
-			if (this.sessionId && this.deviceId) {
+			// Clear ping interval
+			if (this.pingInterval) {
+				clearInterval(this.pingInterval);
+				this.pingInterval = null;
+			}
+
+			// If using direct connection, send disconnect message
+			if (this.useDirectConnection) {
+				this.sendDirectMessage({
+					type: "deviceDisconnected",
+					sessionId: this.sessionId,
+					deviceId: this.deviceId,
+					deviceType: this.deviceType,
+					timestamp: Date.now(),
+				});
+			}
+
+			// If using Firebase, update device status
+			if (firebaseAvailable && this.sessionId && this.deviceId) {
 				const deviceRef = ref(
 					database,
 					`sessions/${this.sessionId}/devices/${this.deviceId}`
