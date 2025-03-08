@@ -1,0 +1,318 @@
+.live-monitor {
+	padding: 1rem;
+	background-color: #f8f9fa;
+	min-height: calc(100vh - 120px);
+	width: 100%;
+	max-width: 100%;
+	margin: 0;
+}
+
+.page-title {
+	text-align: center;
+	color: #333;
+	font-size: 2rem;
+	margin-bottom: 2rem;
+}
+
+.connection-status-section {
+	background: white;
+	border-radius: 8px;
+	padding: 1.5rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	margin-bottom: 1.5rem;
+	width: 100%;
+}
+
+.connection-status-section h2 {
+	color: #6f42c1;
+	margin-top: 0;
+	margin-bottom: 1rem;
+	font-size: 1.5rem;
+	font-weight: 500;
+}
+
+.connection-details {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.connection-info {
+	text-align: right;
+}
+
+.connection-info p {
+	margin: 0.25rem 0;
+	color: #6c757d;
+}
+
+.camera-feed-section {
+	background: white;
+	border-radius: 8px;
+	padding: 1.5rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	margin-bottom: 1.5rem;
+	width: 100%;
+}
+
+.camera-feed-section h2 {
+	color: #6f42c1;
+	margin-top: 0;
+	margin-bottom: 1rem;
+	font-size: 1.5rem;
+	font-weight: 500;
+}
+
+.camera-status {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.frame-info {
+	text-align: right;
+	color: #6c757d;
+}
+
+.camera-preview {
+	width: 100%;
+	height: 200px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #f5f5f5;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.camera-preview img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.camera-placeholder {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	color: #6c757d;
+}
+
+.camera-icon {
+	font-size: 2rem;
+	margin-bottom: 0.5rem;
+}
+
+.status-indicator {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.status-dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: #dc3545;
+}
+
+.status-dot.connected {
+	background: #28a745;
+}
+
+.status-dot.connecting {
+	background: #ffc107;
+}
+
+/* Monitor Grid */
+.monitor-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+	width: 100%;
+}
+
+/* Metric Cards */
+.metric-card {
+	background: white;
+	border-radius: 8px;
+	padding: 1.5rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	margin-bottom: 1rem;
+	width: 100%;
+}
+
+.metric-card h2 {
+	color: #6f42c1;
+	margin-top: 0;
+	margin-bottom: 1.5rem;
+	font-size: 1.5rem;
+	font-weight: 500;
+}
+
+.heart-rate {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 150px;
+}
+
+.heart-rate .metric-value {
+	display: flex;
+	align-items: baseline;
+}
+
+.heart-rate .value {
+	font-size: 5rem;
+	font-weight: bold;
+	color: #6f42c1;
+	line-height: 1;
+}
+
+.heart-rate .unit {
+	font-size: 1.5rem;
+	color: #6c757d;
+	margin-left: 0.5rem;
+}
+
+/* HRV Metrics Card */
+.hrv-metrics {
+	min-height: 200px;
+}
+
+.hrv-metrics h2 {
+	color: #6f42c1;
+	margin-bottom: 1.5rem;
+	font-size: 1.8rem;
+}
+
+.metrics-grid {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 0.5rem;
+}
+
+.metric {
+	background: #f5f5f5;
+	padding: 1rem 0.5rem;
+	border-radius: 4px;
+	text-align: center;
+}
+
+.metric-label {
+	color: #ff6b6b;
+	font-size: 0.9rem;
+	margin-bottom: 0.5rem;
+	display: block;
+}
+
+.metric .metric-value {
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+}
+
+.metric .value {
+	font-size: 1.5rem;
+	font-weight: bold;
+	color: #6f42c1;
+}
+
+.metric .unit {
+	font-size: 0.8rem;
+	color: #6c757d;
+	margin-left: 0.25rem;
+}
+
+/* Heart Rate Trend Card */
+.heart-rate-trend {
+	grid-column: 1 / -1;
+}
+
+.chart-container {
+	height: 300px;
+	margin-top: 1rem;
+}
+
+.no-data {
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #6c757d;
+	font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+	.monitor-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.heart-rate-trend {
+		grid-column: auto;
+	}
+
+	.connection-details,
+	.camera-status {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.connection-info,
+	.frame-info {
+		text-align: left;
+		margin-top: 1rem;
+	}
+}
+
+@media (max-width: 576px) {
+	.live-monitor {
+		padding: 0.5rem;
+	}
+
+	.page-title {
+		font-size: 1.5rem;
+	}
+
+	.metrics-grid {
+		grid-template-columns: repeat(3, 1fr);
+		gap: 0.25rem;
+	}
+
+	.heart-rate .value {
+		font-size: 3.5rem;
+	}
+}
+
+/* Connection Success Message */
+.connection-success {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	background-color: #d4edda;
+	color: #155724;
+	padding: 1rem;
+	border-radius: 8px;
+	margin-bottom: 1.5rem;
+}
+
+.success-icon {
+	width: 24px;
+	height: 24px;
+	background-color: #28a745;
+	color: white;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: bold;
+}
+
+.connection-success p {
+	margin: 0;
+}

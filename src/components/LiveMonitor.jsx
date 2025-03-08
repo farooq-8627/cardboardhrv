@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import connectionService from "../utils/connectionService";
@@ -14,6 +14,7 @@ import {
 	Tooltip,
 	Legend,
 } from "chart.js";
+import "../styles/LiveMonitor.css";
 
 // Register Chart.js components
 ChartJS.register(
@@ -126,301 +127,240 @@ function LiveMonitor() {
 		}
 	};
 
-	// Chart data
-	const heartRateChartData = {
-		labels: Array.isArray(heartRateData)
-			? heartRateData.map((_, index) => index.toString())
-			: [],
-		datasets: [
-			{
-				label: "Heart Rate (BPM)",
-				data: Array.isArray(heartRateData)
-					? heartRateData.map((data) => data.value)
-					: [],
-				borderColor: "rgb(255, 99, 132)",
-				backgroundColor: "rgba(255, 99, 132, 0.5)",
-				tension: 0.3,
-			},
-		],
-	};
+	// Prepare chart data
+	const chartData = useMemo(() => {
+		// Get the last 30 data points or all if less than 30
+		const dataPoints = heartRateData.slice(-30);
 
-	const hrvChartData = {
-		labels: Array.isArray(heartRateData)
-			? heartRateData.map((_, index) => index.toString())
-			: [],
-		datasets: [
-			{
-				label: "HRV (ms)",
-				data: Array.isArray(heartRateData)
-					? heartRateData.map(() => hrvMetrics?.rmssd || 0)
-					: [],
-				borderColor: "rgb(53, 162, 235)",
-				backgroundColor: "rgba(53, 162, 235, 0.5)",
-				tension: 0.3,
-			},
-		],
-	};
+		return {
+			labels: dataPoints.map((_, index) => ""),
+			datasets: [
+				{
+					label: "Heart Rate (BPM)",
+					data: dataPoints.map((point) => point.value),
+					borderColor: "#ff6b6b",
+					backgroundColor: "rgba(255, 107, 107, 0.1)",
+					borderWidth: 2,
+					fill: true,
+					tension: 0.4,
+					pointRadius: 0,
+				},
+			],
+		};
+	}, [heartRateData]);
 
+	// Chart options
 	const chartOptions = {
 		responsive: true,
 		maintainAspectRatio: false,
+		plugins: {
+			legend: {
+				position: "top",
+				align: "end",
+				labels: {
+					boxWidth: 15,
+					usePointStyle: true,
+					pointStyle: "rect",
+				},
+				title: {
+					text: "Heart Rate Variability",
+					display: true,
+					font: {
+						size: 14,
+					},
+				},
+			},
+			tooltip: {
+				mode: "index",
+				intersect: false,
+			},
+		},
 		scales: {
 			y: {
-				beginAtZero: false,
+				min: 40,
+				max: 120,
+				ticks: {
+					stepSize: 10,
+					callback: function (value) {
+						return value;
+					},
+				},
+				grid: {
+					color: "rgba(0, 0, 0, 0.05)",
+				},
+				title: {
+					display: true,
+					text: "BPM",
+					font: {
+						size: 12,
+					},
+				},
+			},
+			x: {
+				grid: {
+					display: false,
+				},
+				title: {
+					display: true,
+					text: "Time",
+					font: {
+						size: 12,
+					},
+				},
 			},
 		},
 		animation: {
-			duration: 0,
+			duration: 500,
+		},
+		elements: {
+			line: {
+				tension: 0.4,
+			},
 		},
 	};
 
 	return (
 		<div className="live-monitor">
-			<div className="section-title">
-				<h1>Live Heart Rate Monitor</h1>
+			<h1 className="page-title">Live Heart Rate Monitor</h1>
+
+			{/* Connection Success Message */}
+			{connectionStatus === "connected" && (
+				<div className="connection-success">
+					<div className="success-icon">✓</div>
+					<p>Your phone is connected and sending heart rate data.</p>
+				</div>
+			)}
+
+			{/* Connection Status Section */}
+			<div className="connection-status-section">
+				<h2>Connection Status</h2>
+				<div className="connection-details">
+					<div className="status-indicator">
+						<div className={`status-dot ${connectionStatus}`}></div>
+						<span>
+							{connectionStatus === "connected"
+								? "Connected"
+								: connectionStatus === "connecting"
+								? "Connecting..."
+								: "Disconnected"}
+						</span>
+					</div>
+					{deviceInfo && (
+						<div className="connection-info">
+							<p>
+								<strong>Session ID:</strong> {sessionId}
+							</p>
+							<p>
+								<strong>Mobile Device:</strong> {deviceInfo.mobileDeviceId}
+							</p>
+							<p>
+								<strong>Connected at:</strong>{" "}
+								{new Date(deviceInfo.timestamp).toLocaleTimeString()}
+							</p>
+						</div>
+					)}
+				</div>
 			</div>
 
-			<div className="monitor-container">
-				{!sessionId ? (
-					<div className="error-message card">
-						<h2>Error</h2>
-						<p>
-							No session ID provided. Please go back and connect your phone.
-						</p>
-						<button
-							className="primary-button"
-							onClick={() => (window.location.href = "/connect")}
-						>
-							Go to Connect Page
-						</button>
+			{/* Mobile Camera Feed Section */}
+			<div className="camera-feed-section">
+				<h2>Mobile Camera Feed</h2>
+				<div className="camera-status">
+					<div className="status-indicator">
+						<div
+							className={`status-dot ${
+								isRecording ? "connected" : "disconnected"
+							}`}
+						></div>
+						<span>{isRecording ? "Recording" : "Not Recording"}</span>
 					</div>
-				) : (
-					<>
-						<div className="connection-status card">
-							<h2>Connection Status</h2>
-							<div className={`status-indicator ${connectionStatus}`}>
-								<div className="status-dot"></div>
-								<span className="status-text">
-									{connectionStatus === "connected"
-										? "Connected"
-										: connectionStatus === "connecting"
-										? "Connecting..."
-										: connectionStatus === "disconnected"
-										? "Disconnected"
-										: "Unknown"}
-								</span>
-							</div>
-							{deviceInfo && (
-								<div className="device-info">
-									<p>
-										<strong>Session ID:</strong> {sessionId}
-									</p>
-									<p>
-										<strong>Mobile Device:</strong> {deviceInfo.mobileDeviceId}
-									</p>
-									<p>
-										<strong>Connected at:</strong>{" "}
-										{new Date(deviceInfo.timestamp).toLocaleTimeString()}
-									</p>
-								</div>
-							)}
+					{lastFrameTime && (
+						<div className="frame-info">
+							<p>Last frame: {new Date(lastFrameTime).toLocaleTimeString()}</p>
 						</div>
+					)}
+				</div>
+				<div className="camera-preview">
+					{cameraFrame ? (
+						<img
+							src={`data:image/jpeg;base64,${cameraFrame}`}
+							alt="Camera feed"
+						/>
+					) : (
+						<div className="camera-placeholder">
+							<span className="camera-icon">📷</span>
+							<p>Connect your mobile device to start streaming</p>
+						</div>
+					)}
+				</div>
+			</div>
 
-						{/* Camera Feed Display */}
-						<div className="camera-feed-card card">
-							<h2>Mobile Camera Feed</h2>
-							<div
-								className="camera-status"
-								style={{
-									display: "flex",
-									alignItems: "center",
-									marginBottom: "0.5rem",
-								}}
-							>
-								<div
-									className={`status-dot ${
-										isRecording ? "recording" : "not-recording"
-									}`}
-									style={{
-										width: "12px",
-										height: "12px",
-										borderRadius: "50%",
-										backgroundColor: isRecording ? "#dc3545" : "#6c757d",
-										marginRight: "8px",
-										animation: isRecording ? "pulse 1s infinite" : "none",
-									}}
-								></div>
-								<span>{isRecording ? "Recording" : "Not Recording"}</span>
-								{lastFrameTime && (
-									<span
-										style={{
-											marginLeft: "auto",
-											fontSize: "0.8rem",
-											color: "#6c757d",
-										}}
-									>
-										Last frame: {new Date(lastFrameTime).toLocaleTimeString()}
-									</span>
-								)}
-							</div>
+			<div className="monitor-grid">
+				{/* Heart Rate Card */}
+				<div className="metric-card">
+					<h2>Heart Rate</h2>
+					<div className="heart-rate">
+						<div className="metric-value">
+							<span className="value">{currentHeartRate || 0}</span>
+							<span className="unit">BPM</span>
+						</div>
+					</div>
+				</div>
 
-							<div
-								className="camera-feed-container"
-								style={{
-									position: "relative",
-									width: "100%",
-									height: "240px",
-									backgroundColor: "#f8f9fa",
-									borderRadius: "4px",
-									overflow: "hidden",
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-								}}
-							>
-								{cameraFrame ? (
-									<>
-										<img
-											src={cameraFrame}
-											alt="Camera Feed"
-											style={{
-												maxWidth: "100%",
-												maxHeight: "100%",
-												objectFit: "contain",
-												display: "block",
-											}}
-											onLoad={() => console.log("Frame loaded successfully")}
-											onError={(e) => {
-												console.error("Error loading camera frame:", e);
-												e.target.style.display = "none";
-											}}
-										/>
-										{lastFrameTime && Date.now() - lastFrameTime > 5000 && (
-											<div
-												style={{
-													position: "absolute",
-													top: "50%",
-													left: "50%",
-													transform: "translate(-50%, -50%)",
-													backgroundColor: "rgba(0, 0, 0, 0.7)",
-													color: "white",
-													padding: "8px 16px",
-													borderRadius: "4px",
-													fontSize: "0.9rem",
-												}}
-											>
-												Frame frozen - Check mobile connection
-											</div>
-										)}
-										{isRecording && (
-											<div
-												className="recording-indicator"
-												style={{
-													position: "absolute",
-													top: "10px",
-													right: "10px",
-													backgroundColor: "rgba(220, 53, 69, 0.7)",
-													color: "white",
-													padding: "0.25rem 0.5rem",
-													borderRadius: "4px",
-													fontSize: "0.8rem",
-													display: "flex",
-													alignItems: "center",
-													gap: "4px",
-												}}
-											>
-												<div
-													style={{
-														width: "8px",
-														height: "8px",
-														borderRadius: "50%",
-														backgroundColor: "#fff",
-														animation: "pulse 1s infinite",
-													}}
-												></div>
-												REC
-											</div>
-										)}
-									</>
-								) : (
-									<div
-										style={{
-											display: "flex",
-											flexDirection: "column",
-											alignItems: "center",
-											justifyContent: "center",
-											height: "100%",
-											textAlign: "center",
-											padding: "1rem",
-										}}
-									>
-										<div
-											className="camera-icon"
-											style={{ fontSize: "3rem", marginBottom: "1rem" }}
-										>
-											📷
-										</div>
-										<p style={{ margin: 0 }}>
-											{connectionStatus === "connected"
-												? "Waiting for camera feed..."
-												: "Connect your mobile device to start streaming"}
-										</p>
-									</div>
-								)}
-							</div>
-							<div
-								style={{
-									marginTop: "0.5rem",
-									fontSize: "0.8rem",
-									color: "#666",
-								}}
-							>
-								{connectionStatus === "connected" && !cameraFrame && (
-									<p>
-										If no camera feed appears, please check that camera access
-										is granted on your mobile device.
-									</p>
-								)}
+				{/* HRV Metrics Card */}
+				<div className="metric-card">
+					<h2>HRV Metrics</h2>
+					<div className="metrics-grid">
+						<div className="metric">
+							<span className="metric-label">SDNN</span>
+							<div className="metric-value">
+								<span className="value">{hrvMetrics.sdnn || 0}</span>
+								<span className="unit">ms</span>
 							</div>
 						</div>
-
-						<div className="metrics-container">
-							<div className="metric-card heart-rate card">
-								<h2>Heart Rate</h2>
-								<div className="metric-value">
-									<span className="value">{currentHeartRate || "--"}</span>
-									<span className="unit">BPM</span>
-								</div>
-								{heartRateData.length > 0 ? (
-									<div className="chart-container">
-										<Line data={heartRateChartData} options={chartOptions} />
-									</div>
-								) : (
-									<div className="no-data-message">
-										<p>Waiting for heart rate data...</p>
-									</div>
-								)}
-							</div>
-
-							<div className="metric-card hrv card">
-								<h2>Heart Rate Variability</h2>
-								<div className="metric-value">
-									<span className="value">{hrvMetrics.rmssd || "--"}</span>
-									<span className="unit">ms</span>
-								</div>
-								{heartRateData.length > 0 ? (
-									<div className="chart-container">
-										<Line data={hrvChartData} options={chartOptions} />
-									</div>
-								) : (
-									<div className="no-data-message">
-										<p>Waiting for HRV data...</p>
-									</div>
-								)}
+						<div className="metric">
+							<span className="metric-label">RMSSD</span>
+							<div className="metric-value">
+								<span className="value">{hrvMetrics.rmssd || 0}</span>
+								<span className="unit">ms</span>
 							</div>
 						</div>
-					</>
-				)}
+						<div className="metric">
+							<span className="metric-label">LF</span>
+							<div className="metric-value">
+								<span className="value">{hrvMetrics.lf || 0}</span>
+								<span className="unit">ms²</span>
+							</div>
+						</div>
+						<div className="metric">
+							<span className="metric-label">HF</span>
+							<div className="metric-value">
+								<span className="value">{hrvMetrics.hf || 0}</span>
+								<span className="unit">ms²</span>
+							</div>
+						</div>
+						<div className="metric">
+							<span className="metric-label">LF/HF</span>
+							<div className="metric-value">
+								<span className="value">{hrvMetrics.lfhf || 0}</span>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				{/* Heart Rate Trend Card */}
+				<div className="metric-card heart-rate-trend">
+					<h2>Heart Rate Trend</h2>
+					<div className="chart-container">
+						{heartRateData.length > 0 ? (
+							<Line data={chartData} options={chartOptions} />
+						) : (
+							<div className="no-data">
+								<p>Waiting for heart rate data...</p>
+							</div>
+						)}
+					</div>
+				</div>
 			</div>
 		</div>
 	);
