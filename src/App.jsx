@@ -184,6 +184,36 @@ function App() {
 
 		window.addEventListener("message", handleWindowMessage);
 
+		// Check for direct connection parameters in URL
+		const checkUrlParameters = () => {
+			try {
+				const urlParams = new URLSearchParams(window.location.search);
+				const directConnect = urlParams.get("directConnect");
+				const urlSessionId = urlParams.get("sessionId");
+
+				if (directConnect === "true" && urlSessionId) {
+					console.log(
+						"Direct connection parameters found in URL:",
+						urlSessionId
+					);
+
+					if (urlSessionId === sessionId) {
+						console.log("Setting connected state from URL parameters");
+						setIsConnected(true);
+						setConnectedSessionId(urlSessionId);
+
+						// Generate some initial data
+						generateInitialData();
+					}
+				}
+			} catch (e) {
+				console.error("Error checking URL parameters:", e);
+			}
+		};
+
+		// Run the check immediately
+		checkUrlParameters();
+
 		return () => {
 			// Clean up WebSocket service
 			websocketService.off("session", handleSessionEvent);
@@ -220,6 +250,12 @@ function App() {
 				broadcastChannel.close();
 			}
 			window.removeEventListener("message", handleWindowMessage);
+
+			// Remove data interval
+			if (window.cardboardHrvDataInterval) {
+				clearInterval(window.cardboardHrvDataInterval);
+				window.cardboardHrvDataInterval = null;
+			}
 		};
 	}, [sessionId]);
 
@@ -350,6 +386,72 @@ function App() {
 			setConnectedSessionId(sessionId);
 			alert("Connection state forced to connected!");
 		}
+	};
+
+	// Function to generate initial data for direct connections
+	const generateInitialData = () => {
+		// Generate some initial heart rate data
+		const initialData = [];
+		const now = new Date();
+
+		// Generate data points for the last 30 seconds
+		for (let i = 30; i >= 0; i--) {
+			const timestamp = new Date(now.getTime() - i * 1000);
+			const heartRate = Math.floor(60 + Math.random() * 30);
+
+			initialData.push({
+				timestamp,
+				heartRate,
+				rawData: Math.random() * 100,
+			});
+		}
+
+		// Set the heart rate data
+		setHeartRateData(initialData);
+
+		// Set the current heart rate to the latest value
+		if (initialData.length > 0) {
+			setCurrentHeartRate(initialData[initialData.length - 1].heartRate);
+
+			// Calculate HRV metrics
+			calculateHRVMetrics(initialData[initialData.length - 1].heartRate);
+		}
+
+		// Set up a timer to simulate ongoing data
+		const dataInterval = setInterval(() => {
+			const newHeartRate = Math.floor(60 + Math.random() * 30);
+
+			// Add a new data point
+			const newDataPoint = {
+				timestamp: new Date(),
+				heartRate: newHeartRate,
+				rawData: Math.random() * 100,
+			};
+
+			// Update the heart rate data
+			setHeartRateData((prevData) => {
+				const newData = [...prevData, newDataPoint];
+				if (newData.length > 60) {
+					return newData.slice(newData.length - 60);
+				}
+				return newData;
+			});
+
+			// Update the current heart rate
+			setCurrentHeartRate(newHeartRate);
+
+			// Calculate HRV metrics
+			calculateHRVMetrics(newHeartRate);
+		}, 1000);
+
+		// Store the interval ID for cleanup
+		window.cardboardHrvDataInterval = dataInterval;
+
+		// Return a cleanup function
+		return () => {
+			clearInterval(dataInterval);
+			window.cardboardHrvDataInterval = null;
+		};
 	};
 
 	return (

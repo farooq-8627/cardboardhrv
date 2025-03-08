@@ -232,6 +232,34 @@ function ConnectMobile() {
 		);
 	};
 
+	// Function to directly redirect to the monitor page with connection parameters
+	const redirectToMonitor = () => {
+		try {
+			// Create a URL to the monitor page with connection parameters
+			const baseUrl = window.location.origin;
+			const monitorUrl = `${baseUrl}/monitor?directConnect=true&sessionId=${
+				sessionId || manualSessionId
+			}&timestamp=${Date.now()}`;
+
+			// Open the monitor URL in a new tab/window
+			window.open(monitorUrl, "_blank");
+
+			// Also try to navigate the parent window if possible
+			if (window.opener && !window.opener.closed) {
+				window.opener.location.href = monitorUrl;
+			}
+
+			setConnectionInfo(
+				"Redirected to monitor page. Please check your computer browser."
+			);
+		} catch (e) {
+			console.error("Error redirecting to monitor:", e);
+			setConnectionInfo(
+				"Failed to redirect. Please manually go to the monitor page on your computer."
+			);
+		}
+	};
+
 	// Function to start streaming camera data to the main application
 	const startStreaming = (stream) => {
 		if (!stream) return;
@@ -706,6 +734,20 @@ function ConnectMobile() {
 							<button className="primary-button" onClick={handleGoBack}>
 								Disconnect
 							</button>
+							<button
+								onClick={redirectToMonitor}
+								style={{
+									padding: "0.5rem",
+									marginTop: "0.5rem",
+									backgroundColor: "#28a745",
+									color: "white",
+									border: "none",
+									borderRadius: "4px",
+									width: "100%",
+								}}
+							>
+								Open Monitor Page Directly
+							</button>
 						</div>
 					</div>
 				)}
@@ -832,6 +874,21 @@ function ConnectMobile() {
 								}}
 							>
 								Force Connection Notification
+							</button>
+							<button
+								onClick={redirectToMonitor}
+								style={{
+									padding: "0.5rem",
+									marginTop: "0.5rem",
+									backgroundColor: "#28a745",
+									color: "white",
+									border: "none",
+									borderRadius: "4px",
+									display: "block",
+									width: "100%",
+								}}
+							>
+								Open Monitor Page Directly
 							</button>
 						</div>
 
