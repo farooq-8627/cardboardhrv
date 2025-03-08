@@ -1,29 +1,46 @@
-/* Base styles */
-:root {
-	--primary-color: #4a6bff;
-	--secondary-color: #6c757d;
-	--success-color: #28a745;
-	--danger-color: #dc3545;
-	--light-color: #f8f9fa;
-	--dark-color: #343a40;
-	--background-color: #f5f7fa;
-	--card-bg: #ffffff;
-	--border-radius: 8px;
-	--box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-	--transition: all 0.3s ease;
-}
+/* App.css for CardboardHRV Project */
 
+/* === CSS Reset and Base Styles === */
 * {
 	box-sizing: border-box;
 	margin: 0;
 	padding: 0;
 }
 
+:root {
+	--primary-color: #7e57c2; /* Purple */
+	--primary-dark: #5e35b1; /* Darker purple */
+	--secondary-color: #ff6b6b;
+	--accent-color: #60d394;
+	--bg-color: #f8fafc;
+	--card-bg: white;
+	--text-primary: #333;
+	--text-secondary: #666;
+	--text-light: #999;
+	--border-color: #ddd;
+	--shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	--shadow-large: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+	--radius: 8px;
+	--transition: all 0.3s ease;
+}
+
 body {
-	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+	font-family: "Segoe UI", "Roboto", "Oxygen", "Ubuntu", sans-serif;
+	color: var(--text-primary);
+	background-color: var(--bg-color);
 	line-height: 1.6;
-	color: var(--dark-color);
-	background-color: var(--background-color);
+	overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-weight: 600;
+	line-height: 1.2;
+	margin-bottom: 0.75rem;
 }
 
 a {
@@ -33,13 +50,13 @@ a {
 }
 
 a:hover {
-	color: #3a56d4;
+	color: var(--primary-dark);
 }
 
 button {
 	cursor: pointer;
 	border: none;
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	padding: 8px 16px;
 	font-size: 1rem;
 	transition: var(--transition);
@@ -49,101 +66,186 @@ ul {
 	list-style: none;
 }
 
-/* App Container */
+/* === Layout === */
 .app-container {
 	display: flex;
 	flex-direction: column;
 	min-height: 100vh;
+	width: 100vw;
+	max-width: 100%;
+	overflow-x: hidden;
+	align-items: center;
+	margin: 0;
+	padding: 0;
 }
 
-/* Header */
-.app-header {
-	background-color: var(--card-bg);
-	padding: 1rem 2rem;
-	box-shadow: var(--box-shadow);
+.main-content {
+	flex: 1;
+	width: 100%;
+	max-width: 100%;
+	padding: 0;
+	min-height: calc(100vh - 150px);
 	display: flex;
-	justify-content: space-between;
+	flex-direction: column;
 	align-items: center;
 }
 
-.logo h1 {
-	color: var(--primary-color);
-	font-size: 1.8rem;
-	margin: 0;
+/* Make all main components take full width */
+.live-monitor,
+.connect-phone,
+.project-info,
+.connect-mobile,
+.home-container {
+	width: 100%;
+	max-width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 1rem;
 }
 
-/* Navigation */
-.main-nav {
+/* Center section titles */
+.section-title {
+	width: 100%;
+	text-align: center;
+	margin-bottom: 1.5rem;
+}
+
+/* Make cards take full width */
+.card,
+.connection-methods,
+.connection-status-container,
+.not-connected,
+.monitoring-container,
+.info-section,
+.cta-section,
+.hero-section {
+	width: 100%;
+	max-width: 100%;
+	margin-bottom: 1.5rem;
+	border-radius: 0;
+}
+
+/* === Header and Navigation === */
+.app-header {
 	background-color: var(--card-bg);
-	padding: 0.5rem 2rem;
-	border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+	padding: 1rem 0;
+	box-shadow: var(--shadow);
+	position: sticky;
+	top: 0;
+	z-index: 100;
+	width: 100vw;
+	max-width: 100%;
+	display: flex;
+	justify-content: center;
+}
+
+.app-header .inner-header {
+	width: 100%;
+	max-width: 100%;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0 1rem;
+}
+
+.app-header .logo h1 {
+	font-size: 1.8rem;
+	margin: 0;
+	color: var(--primary-color);
+	font-weight: 700;
+}
+
+.app-header .logo a {
+	text-decoration: none;
+	display: flex;
+	align-items: center;
+}
+
+.main-nav {
+	background-color: var(--primary-color);
+	width: 100vw;
+	max-width: 100%;
+	display: flex;
+	justify-content: center;
+	padding: 0;
 }
 
 .main-nav ul {
 	display: flex;
-	gap: 2rem;
+	list-style: none;
+	justify-content: center;
+	flex-wrap: wrap;
+	width: 100%;
+	max-width: 100%;
+	margin: 0;
+	padding: 0;
+}
+
+.main-nav li {
+	margin: 0;
 }
 
 .main-nav a {
-	color: var(--dark-color);
+	color: white;
+	text-decoration: none;
+	padding: 1rem 1.5rem;
+	display: block;
 	font-weight: 500;
-	padding: 0.5rem 0;
+	transition: var(--transition);
 	position: relative;
+	text-align: center;
 }
 
-.main-nav a:hover {
-	color: var(--primary-color);
+.main-nav a:hover,
+.main-nav a.active {
+	background-color: rgba(255, 255, 255, 0.15);
 }
 
 .main-nav a::after {
 	content: "";
 	position: absolute;
 	bottom: 0;
-	left: 0;
+	left: 50%;
+	transform: translateX(-50%);
 	width: 0;
-	height: 2px;
-	background-color: var(--primary-color);
+	height: 3px;
+	background-color: white;
 	transition: var(--transition);
 }
 
-.main-nav a:hover::after {
-	width: 100%;
+.main-nav a:hover::after,
+.main-nav a.active::after {
+	width: 50%;
 }
 
-/* Main Content */
-.main-content {
-	flex: 1;
-	padding: 2rem;
-	max-width: 1200px;
-	margin: 0 auto;
-	width: 100%;
-}
-
-/* Footer */
+/* === Footer === */
 .app-footer {
 	background-color: var(--card-bg);
-	padding: 1.5rem 2rem;
+	padding: 1rem;
 	text-align: center;
-	border-top: 1px solid rgba(0, 0, 0, 0.1);
+	border-top: 1px solid var(--border-color);
 	margin-top: auto;
+	width: 100vw;
+	max-width: 100%;
 }
 
-/* Home Page */
-.home-container {
-	text-align: center;
-	padding: 2rem 0;
+.app-footer p {
+	margin: 0.5rem 0;
+	color: var(--text-secondary);
 }
 
+/* === Homepage === */
 .home-container h1 {
-	font-size: 3rem;
+	font-size: 2.5rem;
 	color: var(--primary-color);
 	margin-bottom: 0.5rem;
 }
 
 .home-container h2 {
-	font-size: 1.5rem;
+	font-size: 1.3rem;
 	font-weight: 400;
-	color: var(--secondary-color);
+	color: var(--text-secondary);
 	margin-bottom: 2rem;
 	max-width: 800px;
 	margin-left: auto;
@@ -152,38 +254,43 @@ ul {
 
 .hero-section {
 	background-color: var(--card-bg);
-	padding: 3rem;
-	border-radius: var(--border-radius);
-	box-shadow: var(--box-shadow);
-	max-width: 800px;
+	padding: 2rem;
+	box-shadow: var(--shadow);
 	margin: 0 auto;
 }
 
 .hero-section p {
-	font-size: 1.2rem;
-	margin-bottom: 2rem;
+	margin-bottom: 1.5rem;
+	font-size: 1.1rem;
 }
 
 .cta-button {
 	display: inline-block;
 	background-color: var(--primary-color);
 	color: white;
-	padding: 12px 24px;
-	border-radius: var(--border-radius);
+	padding: 0.75rem 1.5rem;
+	border-radius: var(--radius);
+	text-decoration: none;
 	font-weight: 600;
-	font-size: 1.1rem;
 	transition: var(--transition);
+	border: none;
+	cursor: pointer;
+	font-size: 1rem;
 }
 
 .cta-button:hover {
-	background-color: #3a56d4;
-	color: white;
+	background-color: var(--primary-dark);
 	transform: translateY(-2px);
-	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: var(--shadow);
 }
 
 /* Live Monitor */
 .live-monitor {
+	width: 100%;
+	max-width: 1200px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 	padding: 1rem 0;
 }
 
@@ -193,7 +300,11 @@ ul {
 }
 
 .not-connected {
-	text-align: center;
+	width: 100%;
+	max-width: 1200px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 	padding: 3rem;
 	background-color: var(--card-bg);
 	border-radius: var(--border-radius);
@@ -206,12 +317,16 @@ ul {
 }
 
 .monitoring-container {
+	width: 100%;
+	max-width: 1200px;
 	display: grid;
 	grid-template-columns: 1fr;
 	gap: 2rem;
 }
 
 .vital-cards {
+	width: 100%;
+	max-width: 1200px;
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 	gap: 1.5rem;
@@ -219,6 +334,8 @@ ul {
 }
 
 .vital-card {
+	width: 100%;
+	max-width: 1200px;
 	background-color: var(--card-bg);
 	padding: 1.5rem;
 	border-radius: var(--border-radius);
@@ -374,6 +491,11 @@ ul {
 
 /* Connect Phone */
 .connect-phone {
+	width: 100%;
+	max-width: 1200px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 	padding: 1rem 0;
 }
 
@@ -383,7 +505,11 @@ ul {
 }
 
 .connection-status {
-	text-align: center;
+	width: 100%;
+	max-width: 1200px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 	padding: 3rem;
 	background-color: var(--card-bg);
 	border-radius: var(--border-radius);
@@ -402,6 +528,8 @@ ul {
 }
 
 .connection-methods {
+	width: 100%;
+	max-width: 1200px;
 	background-color: var(--card-bg);
 	border-radius: var(--border-radius);
 	box-shadow: var(--box-shadow);
@@ -410,25 +538,43 @@ ul {
 
 .method-tabs {
 	display: flex;
-	border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+	border-bottom: 1px solid var(--border-color);
+	background-color: #f0f4f8;
+	width: 100%;
+	max-width: 100%;
 }
 
 .method-tabs button {
 	flex: 1;
 	padding: 1rem;
-	background-color: transparent;
-	border-radius: 0;
-	border-bottom: 3px solid transparent;
-	font-weight: 500;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--text-secondary);
+	transition: var(--transition);
+	position: relative;
+	z-index: 1;
+	background-color: #f0f4f8;
 }
 
 .method-tabs button.active {
-	border-bottom-color: var(--primary-color);
+	background-color: white;
 	color: var(--primary-color);
+	border-bottom: 3px solid var(--primary-color);
+}
+
+.method-tabs button:hover:not(.active) {
+	background-color: rgba(0, 0, 0, 0.05);
+}
+
+.method-tabs button:not(:last-child) {
+	border-right: 1px solid var(--border-color);
 }
 
 .method-content {
 	padding: 2rem;
+	background-color: white;
 }
 
 .qrcode-method,
@@ -515,6 +661,11 @@ ul {
 
 /* Project Info */
 .project-info {
+	width: 100%;
+	max-width: 1200px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 	padding: 1rem 0;
 }
 
@@ -524,6 +675,8 @@ ul {
 }
 
 .info-section {
+	width: 100%;
+	max-width: 1200px;
 	background-color: var(--card-bg);
 	padding: 2rem;
 	border-radius: var(--border-radius);
@@ -601,6 +754,8 @@ ul {
 }
 
 .cta-section {
+	width: 100%;
+	max-width: 1200px;
 	text-align: center;
 	padding: 3rem;
 	background-color: var(--card-bg);
@@ -614,10 +769,45 @@ ul {
 }
 
 /* Responsive Adjustments */
-@media (max-width: 768px) {
+@media (max-width: 1200px) {
+	.live-monitor,
+	.connect-phone,
+	.project-info,
+	.connect-mobile,
+	.home-container,
+	.app-header .inner-header,
 	.main-nav ul {
-		flex-direction: column;
-		gap: 0.5rem;
+		max-width: 95%;
+	}
+}
+
+@media (max-width: 768px) {
+	.main-content {
+		padding: 0.5rem;
+	}
+
+	.card,
+	.connection-methods,
+	.connection-status-container,
+	.not-connected,
+	.monitoring-container,
+	.info-section,
+	.cta-section {
+		padding: 1rem;
+	}
+
+	.main-nav ul {
+		flex-direction: row;
+		width: 100%;
+	}
+
+	.main-nav li {
+		flex: 1;
+	}
+
+	.main-nav a {
+		padding: 0.75rem 0.5rem;
+		font-size: 0.9rem;
 	}
 
 	.vital-cards {
@@ -641,6 +831,29 @@ ul {
 	.method-tabs button.active {
 		border-left-color: var(--primary-color);
 		border-bottom: none;
+	}
+}
+
+@media (max-width: 576px) {
+	.main-content {
+		padding: 0.25rem;
+	}
+
+	.app-header .inner-header {
+		padding: 0 0.5rem;
+	}
+
+	.app-header .logo h1 {
+		font-size: 1.5rem;
+	}
+
+	.main-nav a {
+		padding: 0.75rem 0.25rem;
+		font-size: 0.8rem;
+	}
+
+	.main-nav a::after {
+		display: none;
 	}
 }
 
@@ -669,22 +882,23 @@ ul {
 
 /* Connect Mobile Page */
 .connect-mobile {
-	max-width: 600px;
+	width: 100%;
+	max-width: 1200px;
 	margin: 0 auto;
 	padding: 2rem 1rem;
-	text-align: center;
-}
-
-.connect-mobile h1 {
-	color: var(--primary-color);
-	margin-bottom: 2rem;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 }
 
 .connection-status-container {
+	width: 100%;
+	max-width: 800px;
 	background-color: var(--card-bg);
 	border-radius: var(--border-radius);
 	box-shadow: var(--box-shadow);
 	padding: 2rem;
+	margin: 0 auto;
 }
 
 .status {
@@ -944,4 +1158,179 @@ ul {
 
 .chrome-settings-note li {
 	margin-bottom: 0.25rem;
+}
+
+/* Tab icons styling */
+.tab-icon {
+	margin-right: 0.5rem;
+	font-size: 1.2rem;
+}
+
+@media (max-width: 576px) {
+	.method-tabs button {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 0.75rem 0.5rem;
+	}
+
+	.tab-icon {
+		margin-right: 0;
+		margin-bottom: 0.25rem;
+		font-size: 1.5rem;
+	}
+}
+
+/* Camera feed styles */
+.camera-feed-container {
+	width: 100%;
+	margin: 1rem 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.camera-feed-video {
+	width: 100%;
+	max-width: 320px;
+	height: auto;
+	border-radius: 8px;
+	border: 2px solid var(--primary-color);
+	background-color: #000;
+}
+
+.heart-rate-display {
+	margin: 1rem 0;
+	text-align: center;
+}
+
+.connection-info {
+	margin: 1rem 0;
+	padding: 0.5rem;
+	background-color: rgba(0, 0, 0, 0.05);
+	border-radius: 4px;
+	text-align: center;
+	font-size: 0.9rem;
+}
+
+.session-timer {
+	margin: 0.5rem 0;
+	font-weight: bold;
+	color: var(--primary-color);
+}
+
+/* Improve heart animation */
+@keyframes heartbeat {
+	0% {
+		transform: rotate(45deg) scale(0.8);
+	}
+	5% {
+		transform: rotate(45deg) scale(0.9);
+	}
+	10% {
+		transform: rotate(45deg) scale(0.8);
+	}
+	15% {
+		transform: rotate(45deg) scale(1);
+	}
+	50% {
+		transform: rotate(45deg) scale(0.8);
+	}
+	100% {
+		transform: rotate(45deg) scale(0.8);
+	}
+}
+
+/* Manual session ID entry styles */
+.manual-session {
+	text-align: center;
+	padding: 1.5rem;
+}
+
+.manual-session form {
+	margin: 1.5rem 0;
+}
+
+.manual-session .input-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	max-width: 300px;
+	margin: 0 auto;
+}
+
+.manual-session input {
+	padding: 0.75rem;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-size: 1rem;
+	text-align: center;
+}
+
+.manual-session .primary-button {
+	margin-top: 0.5rem;
+}
+
+.manual-session .instructions {
+	margin-top: 1.5rem;
+	text-align: left;
+	background-color: rgba(0, 0, 0, 0.05);
+	padding: 1rem;
+	border-radius: 4px;
+	max-width: 400px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.manual-session .connection-note {
+	margin-top: 1.5rem;
+	font-size: 0.9rem;
+	color: #666;
+}
+
+/* Browser info styles */
+.browser-info {
+	font-size: 0.8rem;
+	color: #666;
+	background-color: rgba(0, 0, 0, 0.05);
+	padding: 0.5rem;
+	border-radius: 4px;
+	margin: 1rem 0;
+	word-break: break-all;
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+/* Connection status in LiveMonitor */
+.monitoring-container .connection-status {
+	margin-bottom: 1rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.75rem;
+}
+
+.monitoring-container .connection-status p {
+	margin: 0 0 0 0.5rem;
+	font-weight: 500;
+}
+
+.monitoring-container .success-icon {
+	font-size: 1.2rem;
+	color: var(--success-color);
+	margin-right: 0.5rem;
+}
+
+/* Connection status message */
+.connection-status-message {
+	margin: 1.5rem 0;
+	padding: 1rem;
+	background-color: rgba(0, 0, 0, 0.05);
+	border-radius: 4px;
+	text-align: center;
+}
+
+.connection-status-message p {
+	margin: 0.5rem 0;
+	font-weight: 500;
 }

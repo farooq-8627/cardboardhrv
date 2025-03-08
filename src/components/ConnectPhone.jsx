@@ -1,265 +1,235 @@
-import React, { useState, useEffect } from "react";
-import QRCode from "qrcode.react";
-import { getLocalIP } from "../utils/getLocalIP";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import QRCode from "react-qr-code";
 
-function ConnectPhone({ isConnected, onConnect }) {
-	const [connectionMethod, setConnectionMethod] = useState("qrcode");
-	const [qrValue, setQrValue] = useState("");
-	const [deviceId, setDeviceId] = useState("");
+function ConnectPhone({
+	isConnected,
+	onConnect,
+	sessionId,
+	connectedSessionId,
+}) {
+	const [activeTab, setActiveTab] = useState("qrcode");
+	const [manualCode, setManualCode] = useState("");
 	const [error, setError] = useState("");
-	const [publicIpAddress, setPublicIpAddress] = useState("");
-	const [localIpAddress, setLocalIpAddress] = useState("");
-	const [networkUrl, setNetworkUrl] = useState("");
+	const navigate = useNavigate();
+	const [qrValue, setQrValue] = useState("");
+	const [localIp, setLocalIp] = useState("");
+	const qrValueRef = useRef(null);
 
-	// Generate a session ID for QR code and detect IP addresses
 	useEffect(() => {
-		const sessionId = Math.random().toString(36).substring(2, 15);
+		// Only generate the QR code URL once when the component mounts or sessionId changes
+		if (!qrValueRef.current && sessionId) {
+			// Get the current hostname/IP
+			const hostname = window.location.hostname;
+			const port = window.location.port;
+			const protocol = window.location.protocol;
 
-		// Get local network IP address
-		const detectLocalIP = async () => {
-			try {
-				const localIP = await getLocalIP();
-				if (localIP) {
-					setLocalIpAddress(localIP);
-					console.log("Local Network IP detected:", localIP);
+			// Create the URL for the mobile connection
+			const baseUrl = `${protocol}//${hostname}${port ? ":" + port : ""}`;
+			const mobileUrl = `${baseUrl}/mobile?session=${sessionId}`;
 
-					// Use the local network IP for the QR code
-					const port =
-						window.location.port ||
-						(window.location.protocol === "https:" ? "443" : "80");
-					const localNetworkUrl = `http://${localIP}:${port}`;
-					setNetworkUrl(localNetworkUrl);
+			setQrValue(mobileUrl);
+			qrValueRef.current = mobileUrl;
+			setLocalIp(hostname);
+		}
 
-					const connectionUrl = `${localNetworkUrl}/connect-mobile?session=${sessionId}`;
-					console.log("Connection URL (local network):", connectionUrl);
-					setQrValue(connectionUrl);
-				} else {
-					// Fallback to window.location.origin if local IP detection fails
-					const baseUrl = window.location.origin;
-					const connectionUrl = `${baseUrl}/connect-mobile?session=${sessionId}`;
-					console.log("Connection URL (fallback):", connectionUrl);
-					setQrValue(connectionUrl);
-				}
-			} catch (error) {
-				console.error("Error detecting local IP:", error);
+		// If already connected, redirect to monitor
+		if (isConnected) {
+			navigate("/monitor");
+		}
+	}, [isConnected, navigate, sessionId]);
 
-				// Fallback to window.location.origin
-				const baseUrl = window.location.origin;
-				const connectionUrl = `${baseUrl}/connect-mobile?session=${sessionId}`;
-				console.log("Connection URL (fallback after error):", connectionUrl);
-				setQrValue(connectionUrl);
-			}
-		};
+	const handleTabChange = (tab) => {
+		setActiveTab(tab);
+		setError("");
+	};
 
-		// Get public IP for information purposes
-		fetch("https://api.ipify.org?format=json")
-			.then((response) => response.json())
-			.then((data) => {
-				setPublicIpAddress(data.ip);
-				console.log("Public IP Address detected:", data.ip);
-			})
-			.catch((error) => {
-				console.error("Error detecting public IP:", error);
-				setPublicIpAddress("Unable to detect");
-			});
-
-		// Detect local IP
-		detectLocalIP();
-	}, []);
-
-	const handleConnect = () => {
-		if (!deviceId) {
-			setError("Please enter a device ID");
+	const handleManualConnect = (e) => {
+		e.preventDefault();
+		if (!manualCode.trim()) {
+			setError("Please enter a valid connection code");
 			return;
 		}
 
-		setError("");
-		onConnect(deviceId);
-	};
-
-	const handleWebRTCConnect = () => {
-		// In a real implementation, this would initiate a WebRTC connection
-		alert("WebRTC connection would initiate here in the actual implementation");
-
-		// For demo purposes, we'll just call onConnect
-		onConnect("webrtc-device");
+		// In a real implementation, this would validate the code
+		// For this demo, we'll just simulate a connection
+		onConnect(manualCode);
 	};
 
 	return (
 		<div className="connect-phone">
-			<h2>Connect Your Phone</h2>
+			<div className="section-title">
+				<h2>Connect Your Phone</h2>
+			</div>
 
 			{isConnected ? (
-				<div className="connection-status connected">
-					<div className="status-icon">✓</div>
+				<div className="connection-status connected card">
+					<div className="success-icon">✓</div>
 					<h3>Phone Connected!</h3>
 					<p>
 						Your phone is now connected and sending data to the application.
 					</p>
 					<p>
-						You can now go to the <strong>Live Monitor</strong> to see your
-						heart rate data.
+						Session ID: <strong>{connectedSessionId}</strong>
 					</p>
+					<p>You can now go to the Live Monitor to see your heart rate data.</p>
+					<button
+						className="primary-button"
+						onClick={() => navigate("/monitor")}
+					>
+						Go to Live Monitor
+					</button>
 				</div>
 			) : (
-				<>
-					<div className="connection-methods">
-						<div className="method-tabs">
-							<button
-								className={connectionMethod === "qrcode" ? "active" : ""}
-								onClick={() => setConnectionMethod("qrcode")}
-							>
-								QR Code
-							</button>
-							<button
-								className={connectionMethod === "direct" ? "active" : ""}
-								onClick={() => setConnectionMethod("direct")}
-							>
-								Direct Connection
-							</button>
-							<button
-								className={connectionMethod === "webrtc" ? "active" : ""}
-								onClick={() => setConnectionMethod("webrtc")}
-							>
-								WebRTC
-							</button>
-						</div>
+				<div className="connection-status card">
+					<p>
+						To monitor your heart rate, connect your smartphone to this
+						application.
+					</p>
 
-						<div className="method-content">
-							{connectionMethod === "qrcode" && (
-								<div className="qrcode-method">
-									<p>
-										Scan this QR code with your phone's camera to connect it to
-										this application:
-									</p>
-									<div className="qrcode-container">
-										<QRCode value={qrValue} size={256} level="H" />
-									</div>
-									<p className="qr-url">
-										<small>URL: {qrValue}</small>
-									</p>
-									<p>
-										<small>
-											This will open a web page on your phone that will request
-											camera access and establish a connection to this
-											application.
-										</small>
-									</p>
-									<div className="connection-note">
-										<p>
-											<strong>Note:</strong> Make sure your phone is on the same
-											WiFi network as this computer.
+					<div className="method-tabs">
+						<button
+							className={activeTab === "qrcode" ? "active" : ""}
+							onClick={() => handleTabChange("qrcode")}
+						>
+							<span className="tab-icon">📱</span> QR Code
+						</button>
+						<button
+							className={activeTab === "manual" ? "active" : ""}
+							onClick={() => handleTabChange("manual")}
+						>
+							<span className="tab-icon">🔢</span> Manual Code
+						</button>
+						<button
+							className={activeTab === "local" ? "active" : ""}
+							onClick={() => handleTabChange("local")}
+						>
+							<span className="tab-icon">🌐</span> Local Network
+						</button>
+					</div>
+
+					<div className="method-content">
+						{activeTab === "qrcode" && (
+							<div className="qrcode-method">
+								<div className="qrcode-container">
+									{qrValue ? (
+										<QRCode value={qrValue} size={200} />
+									) : (
+										<div className="mock-qrcode">
+											<div className="qr-placeholder"></div>
+											<p>Generating QR code...</p>
+										</div>
+									)}
+									{qrValue && (
+										<p className="qr-url">
+											<a
+												href={qrValue}
+												target="_blank"
+												rel="noopener noreferrer"
+											>
+												{qrValue}
+											</a>
 										</p>
-									</div>
-									<div className="camera-requirements">
-										<h4>Camera Requirements:</h4>
-										<ul>
-											<li>
-												The app will request camera access to measure your heart
-												rate
-											</li>
-											<li>
-												Please use Chrome, Safari, or Firefox for best
-												compatibility
-											</li>
-											<li>
-												When prompted, allow camera access in your browser
-											</li>
-											<li>
-												If camera access is denied, you can still connect but
-												with limited functionality
-											</li>
-										</ul>
-									</div>
+									)}
 								</div>
-							)}
 
-							{connectionMethod === "direct" && (
-								<div className="direct-method">
-									<p>
-										Enter your phone's device ID to establish a direct
-										connection:
-									</p>
+								<div className="instructions">
+									<h4>How to Connect:</h4>
+									<ol>
+										<li>Open your smartphone's camera app</li>
+										<li>Scan the QR code above</li>
+										<li>Tap the link that appears</li>
+										<li>Follow the instructions on your phone</li>
+									</ol>
+								</div>
+							</div>
+						)}
+
+						{activeTab === "manual" && (
+							<div className="manual-method">
+								<form onSubmit={handleManualConnect}>
 									<div className="input-group">
+										<label htmlFor="connection-code">Connection Code:</label>
 										<input
 											type="text"
-											placeholder="Device ID or IP address"
-											value={deviceId}
-											onChange={(e) => setDeviceId(e.target.value)}
+											id="connection-code"
+											value={manualCode}
+											onChange={(e) => setManualCode(e.target.value)}
+											placeholder="Enter the 8-digit code"
 										/>
-										<button onClick={handleConnect}>Connect</button>
+										<button type="submit">Connect</button>
 									</div>
 									{error && <p className="error-message">{error}</p>}
+								</form>
 
-									<div className="instructions">
-										<h4>How to find your device ID:</h4>
-										<ol>
-											<li>Install the CardboardHRV mobile app on your phone</li>
-											<li>Open the app and go to Settings</li>
-											<li>Look for "Device ID" and enter it above</li>
-										</ol>
-
-										<div className="local-connection">
-											<h4>Connection Information</h4>
-											<p>
-												Your local network IP:{" "}
-												<strong>{localIpAddress || "Detecting..."}</strong>
-											</p>
-											<p>
-												Your public IP address:{" "}
-												<strong>{publicIpAddress || "Detecting..."}</strong>
-											</p>
-											<p>
-												For local network connection, use:{" "}
-												<strong>{networkUrl || "Detecting..."}</strong>
-											</p>
-											<p>
-												Enter this IP address in the CardboardHRV mobile app to
-												connect directly.
-											</p>
-										</div>
-									</div>
+								<div className="instructions">
+									<h4>How to Find Your Code:</h4>
+									<ol>
+										<li>
+											Open <strong>{window.location.origin}/mobile</strong> on
+											your smartphone
+										</li>
+										<li>
+											Enter the session ID: <strong>{sessionId}</strong>
+										</li>
+										<li>Follow the instructions on your phone</li>
+									</ol>
 								</div>
-							)}
+							</div>
+						)}
 
-							{connectionMethod === "webrtc" && (
-								<div className="webrtc-method">
-									<p>
-										Use WebRTC to establish a peer-to-peer connection with your
-										phone:
-									</p>
-									<div className="webrtc-instructions">
-										<ol>
-											<li>Install the CardboardHRV mobile app on your phone</li>
-											<li>
-												Open the app and go to the WebRTC Connection screen
-											</li>
-											<li>
-												Click the button below to generate a connection code
-											</li>
-											<li>Enter the code in your mobile app when prompted</li>
-										</ol>
-									</div>
-									<button
-										className="webrtc-button"
-										onClick={handleWebRTCConnect}
-									>
-										Start WebRTC Connection
-									</button>
+						{activeTab === "local" && (
+							<div className="local-connection">
+								<p>
+									If you're on the same WiFi network, you can connect directly
+									using this link:
+								</p>
+								<p className="qr-url">
+									<a href={qrValue} target="_blank" rel="noopener noreferrer">
+										{qrValue}
+									</a>
+								</p>
 
+								<div className="connection-note card">
 									<p>
-										<small>
-											WebRTC provides a direct, low-latency connection between
-											your phone and this application, which is ideal for
-											real-time heart rate monitoring.
-										</small>
+										<span className="warning-icon">⚠️</span> Make sure both
+										devices are connected to the same WiFi network.
 									</p>
 								</div>
-							)}
-						</div>
+
+								<div className="instructions">
+									<h4>Session Information:</h4>
+									<ul>
+										<li>
+											<strong>Session ID:</strong> {sessionId}
+										</li>
+										<li>
+											<strong>Local IP:</strong> {localIp}
+										</li>
+									</ul>
+								</div>
+							</div>
+						)}
 					</div>
-				</>
+				</div>
 			)}
+
+			<div className="camera-permission-info card">
+				<h3>Camera Requirements</h3>
+				<div className="camera-requirements">
+					<h4>For best results:</h4>
+					<ul>
+						<li>Use a smartphone with a good quality camera</li>
+						<li>Ensure good lighting conditions</li>
+						<li>
+							Place your fingertip gently over the camera lens when prompted
+						</li>
+						<li>
+							Keep your finger still during measurement for accurate readings
+						</li>
+					</ul>
+				</div>
+			</div>
 		</div>
 	);
 }

@@ -10,85 +10,331 @@ function ConnectMobile() {
 	const [cameraSupported, setCameraSupported] = useState(true);
 	const [cameraPermission, setCameraPermission] = useState(null);
 	const videoRef = useRef(null);
+	const canvasRef = useRef(null);
 	const [showCameraTest, setShowCameraTest] = useState(false);
 	const [cameraStream, setCameraStream] = useState(null);
+	const [isStreaming, setIsStreaming] = useState(false);
+	const [heartRate, setHeartRate] = useState(0);
+	const [connectionInfo, setConnectionInfo] = useState("");
+	const wsRef = useRef(null);
+	const [manualSessionId, setManualSessionId] = useState("");
+	const [browserInfo, setBrowserInfo] = useState("");
+	const connectionAttempted = useRef(false);
+	const [isSecureContext, setIsSecureContext] = useState(true);
+	const [isInIframe, setIsInIframe] = useState(false);
+
+	// Check for secure context and iframe on mount
+	useEffect(() => {
+		// Check if we're in a secure context (required for camera access in modern browsers)
+		if (typeof window !== "undefined" && !window.isSecureContext) {
+			console.error("Not in a secure context - camera access requires HTTPS");
+			setIsSecureContext(false);
+		}
+
+		// Check if we're in an iframe which might restrict permissions
+		try {
+			if (window.self !== window.top) {
+				console.warn(
+					"App is running in an iframe - camera permissions may be restricted"
+				);
+				setIsInIframe(true);
+			}
+		} catch (e) {
+			// If we can't access window.self or window.top, we're likely in an iframe
+			console.warn(
+				"Unable to determine if in iframe - assuming restricted context"
+			);
+			setIsInIframe(true);
+		}
+
+		// More thorough check for camera support
+		const checkCameraSupport = () => {
+			return !!(
+				navigator.mediaDevices &&
+				navigator.mediaDevices.getUserMedia &&
+				window.MediaStream
+			);
+		};
+
+		setCameraSupported(checkCameraSupport());
+		setBrowserInfo(
+			`Browser: ${navigator.userAgent}, Secure Context: ${
+				window.isSecureContext
+			}, Camera API Support: ${checkCameraSupport()}`
+		);
+	}, []);
 
 	// Function to explicitly request camera permission with a direct user interaction
 	const requestCameraPermission = async () => {
 		try {
 			console.log("Explicitly requesting camera permission...");
+			setBrowserInfo(
+				`Browser: ${navigator.userAgent}, Secure Context: ${window.isSecureContext}`
+			);
 
-			// Try with simpler constraints first
+			// Make sure we're using the most reliable approach for modern Chrome
 			const stream = await navigator.mediaDevices.getUserMedia({
-				video: true,
+				video: {
+					facingMode: "user",
+					// Remove specific width/height constraints that might cause issues
+				},
 				audio: false,
 			});
 
 			console.log("Camera permission granted!");
 			setCameraStream(stream);
+			setCameraSupported(true);
 
 			// Show the camera feed to confirm it's working
 			if (videoRef.current) {
 				videoRef.current.srcObject = stream;
 				setShowCameraTest(true);
 
-				// After 3 seconds, hide the camera test
+				// After 3 seconds, start streaming
 				setTimeout(() => {
 					setShowCameraTest(false);
-					// Don't stop the stream yet, keep it active for the connection
 					setCameraPermission("granted");
 					setStatus("connected");
+					startStreaming(stream);
 				}, 3000);
 			}
 
 			return true;
-		} catch (err) {
-			console.error("Camera permission request failed:", err);
-			console.error("Error name:", err.name);
-			console.error("Error message:", err.message);
+		} catch (error) {
+			console.error("Camera permission request failed:", error);
 
-			if (err.name === "NotAllowedError") {
+			// More detailed error logging for debugging
+			console.log("Error name:", error.name);
+			console.log("Error message:", error.message);
+			console.log("Error constraints:", error.constraint);
+
+			if (error.name === "NotAllowedError") {
 				setCameraPermission("denied");
-			} else if (err.name === "NotFoundError") {
+			} else if (error.name === "NotFoundError") {
 				setCameraPermission("notfound");
 			} else {
 				setCameraPermission("error");
 			}
 			setStatus("connected-nocamera");
+
+			// Even if camera access fails, we should still notify the main app that we're connected
+			notifyMainAppConnected();
+
 			return false;
 		}
 	};
 
-	// Clean up camera stream when component unmounts
+	// Function to notify the main app that we're connected
+	const notifyMainAppConnected = () => {
+		if (connectionAttempted.current) return; // Prevent duplicate notifications
+
+		console.log("Notifying main app of connection");
+		window.dispatchEvent(
+			new CustomEvent("cardboardhrv-mobile-connect", {
+				detail: {
+					sessionId: sessionId || manualSessionId,
+					timestamp: new Date().toISOString(),
+				},
+			})
+		);
+
+		connectionAttempted.current = true;
+
+		// Also send a direct message
+		window.dispatchEvent(
+			new CustomEvent("cardboardhrv-mobile-message", {
+				detail: {
+					data: JSON.stringify({
+						type: "connectionStatus",
+						sessionId: sessionId || manualSessionId,
+						status: "connected",
+						message: "Mobile device connected",
+						timestamp: new Date().toISOString(),
+					}),
+				},
+			})
+		);
+	};
+
+	// Function to start streaming camera data to the main application
+	const startStreaming = (stream) => {
+		if (!stream) return;
+
+		setIsStreaming(true);
+
+		// Create a canvas to process the video frames
+		const canvas = canvasRef.current;
+		const ctx = canvas.getContext("2d", { willReadFrequently: true });
+		const video = videoRef.current;
+
+		// Notify the main app that we're connected with camera
+		notifyMainAppConnected();
+
+		try {
+			// For our simulation, we'll use a custom event system instead of actual WebSockets
+			// This is because browsers don't allow WebSocket connections to non-WebSocket servers
+			console.log("Setting up connection to main app");
+
+			// Create a simulated WebSocket
+			const simulatedWs = {
+				readyState: 1, // WebSocket.OPEN
+				send: function (data) {
+					// Dispatch a custom event that the main app can listen for
+					console.log("Sending data to main app:", data);
+					window.dispatchEvent(
+						new CustomEvent("cardboardhrv-mobile-message", {
+							detail: { data },
+						})
+					);
+				},
+				close: function () {
+					console.log("Closing connection to main app");
+					window.dispatchEvent(
+						new CustomEvent("cardboardhrv-mobile-close", {
+							detail: { sessionId: sessionId || manualSessionId },
+						})
+					);
+					this.readyState = 3; // WebSocket.CLOSED
+				},
+			};
+
+			wsRef.current = simulatedWs;
+
+			// Send initialization message
+			simulatedWs.send(
+				JSON.stringify({
+					type: "init",
+					sessionId: sessionId || manualSessionId,
+				})
+			);
+
+			setConnectionInfo("Connected to main application");
+
+			// Set up a function to process video frames and extract heart rate
+			const processFrame = () => {
+				if (!isStreaming || !video || !video.videoWidth) return;
+
+				// Set canvas dimensions to match video
+				canvas.width = video.videoWidth;
+				canvas.height = video.videoHeight;
+
+				// Draw the current video frame to the canvas
+				ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+				// Get the image data from the canvas
+				const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+				// Simple PPG signal extraction (red channel average)
+				let redSum = 0;
+				const data = imageData.data;
+
+				// Sample only a portion of the image for performance
+				const sampleSize = 50;
+				const centerX = Math.floor(canvas.width / 2);
+				const centerY = Math.floor(canvas.height / 2);
+				const startX = centerX - sampleSize / 2;
+				const startY = centerY - sampleSize / 2;
+
+				for (let y = startY; y < startY + sampleSize; y++) {
+					for (let x = startX; x < startX + sampleSize; x++) {
+						const index = (y * canvas.width + x) * 4;
+						redSum += data[index]; // Red channel
+					}
+				}
+
+				const redAvg = redSum / (sampleSize * sampleSize);
+
+				// Simulate heart rate calculation (in a real app, this would use a more sophisticated algorithm)
+				// For demo purposes, we'll use a simple simulation
+				const simulatedHeartRate = Math.floor(60 + Math.random() * 30);
+				setHeartRate(simulatedHeartRate);
+
+				// Send the data to the main application
+				if (wsRef.current && wsRef.current.readyState === 1) {
+					wsRef.current.send(
+						JSON.stringify({
+							type: "heartRateData",
+							sessionId: sessionId || manualSessionId,
+							heartRate: simulatedHeartRate,
+							timestamp: new Date().toISOString(),
+							rawData: redAvg,
+						})
+					);
+				}
+
+				// Continue processing frames
+				if (isStreaming) {
+					requestAnimationFrame(processFrame);
+				}
+			};
+
+			// Start processing frames
+			processFrame();
+
+			// Set up a ping to keep the connection alive
+			const pingInterval = setInterval(() => {
+				if (wsRef.current && wsRef.current.readyState === 1) {
+					wsRef.current.send(
+						JSON.stringify({
+							type: "ping",
+							sessionId: sessionId || manualSessionId,
+							timestamp: new Date().toISOString(),
+						})
+					);
+				} else {
+					clearInterval(pingInterval);
+				}
+			}, 5000);
+
+			// Clean up the interval when the component unmounts
+			return () => clearInterval(pingInterval);
+		} catch (error) {
+			console.error("Error setting up connection:", error);
+			setConnectionInfo("Failed to connect to main application");
+		}
+	};
+
+	// Clean up camera stream and WebSocket when component unmounts
 	useEffect(() => {
+		// Set up event listener for the main app's response
+		const handleMainAppResponse = (event) => {
+			const data = JSON.parse(event.detail.data);
+			console.log("Received response from main app:", data);
+
+			if (data.type === "connectionStatus") {
+				setConnectionInfo(data.message);
+			}
+		};
+
+		window.addEventListener("cardboardhrv-main-message", handleMainAppResponse);
+
 		return () => {
+			// Clean up camera stream
 			if (cameraStream) {
 				cameraStream.getTracks().forEach((track) => track.stop());
 			}
+
+			// Clean up WebSocket
+			if (wsRef.current) {
+				wsRef.current.close();
+			}
+
+			// Remove event listener
+			window.removeEventListener(
+				"cardboardhrv-main-message",
+				handleMainAppResponse
+			);
 		};
 	}, [cameraStream]);
 
 	useEffect(() => {
+		// If no session ID is provided, show the manual entry form
 		if (!sessionId) {
-			setStatus("error");
-			setError("No session ID provided. Please scan the QR code again.");
+			setStatus("no-session");
 			return;
 		}
 
 		setStatus("connecting");
-
-		// Check if camera is supported
-		const checkCameraSupport = async () => {
-			// First check if the browser supports getUserMedia
-			if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-				console.log("Camera API not supported in this browser");
-				setCameraSupported(false);
-				return false;
-			}
-
-			// We'll check for permission in the connect flow
-			return true;
-		};
 
 		// In a real implementation, this would connect to your backend
 		// and establish a WebSocket or WebRTC connection
@@ -97,16 +343,8 @@ function ConnectMobile() {
 				// Simulate connection process
 				await new Promise((resolve) => setTimeout(resolve, 1000));
 
-				// Check camera support
-				const isCameraSupported = await checkCameraSupport();
-
-				if (isCameraSupported) {
-					// Set status to request-camera to show the camera permission button
-					setStatus("request-camera");
-				} else {
-					// We'll still allow connection, but with a warning
-					setStatus("connected-nocamera");
-				}
+				// Set status to request-camera to show the camera permission button
+				setStatus("request-camera");
 			} catch (err) {
 				console.error("Connection error:", err);
 				setStatus("error");
@@ -115,7 +353,7 @@ function ConnectMobile() {
 		};
 
 		connectToBackend();
-	}, [sessionId, navigate]);
+	}, [sessionId, navigate, manualSessionId]);
 
 	const handleRetry = () => {
 		window.location.reload();
@@ -127,6 +365,21 @@ function ConnectMobile() {
 			cameraStream.getTracks().forEach((track) => track.stop());
 		}
 
+		// Close WebSocket if open
+		if (wsRef.current) {
+			wsRef.current.close();
+		}
+
+		// Notify the main app that we're disconnecting
+		window.dispatchEvent(
+			new CustomEvent("cardboardhrv-mobile-disconnect", {
+				detail: {
+					sessionId: sessionId || manualSessionId,
+					timestamp: new Date().toISOString(),
+				},
+			})
+		);
+
 		// This would typically go back to the main app
 		window.close();
 		// If window.close() doesn't work (e.g., the page wasn't opened by a script)
@@ -137,17 +390,30 @@ function ConnectMobile() {
 		await requestCameraPermission();
 	};
 
-	// Function to open Chrome settings directly
-	const openChromeSettings = () => {
-		// This will open Chrome's camera settings page
-		window.open("chrome://settings/content/camera", "_blank");
+	const handleManualSessionSubmit = (e) => {
+		e.preventDefault();
+		if (!manualSessionId.trim()) {
+			setError("Please enter a valid session ID");
+			return;
+		}
+
+		// Update the URL with the session ID
+		navigate(`/mobile?session=${manualSessionId}`);
+	};
+
+	const handleConnectWithoutCamera = () => {
+		setStatus("connected-nocamera");
+		setCameraPermission("skipped");
+		notifyMainAppConnected();
 	};
 
 	return (
 		<div className="connect-mobile">
-			<h1>CardboardHRV Mobile Connection</h1>
+			<div className="section-title">
+				<h1>CardboardHRV Mobile Connection</h1>
+			</div>
 
-			<div className="connection-status-container">
+			<div className="connection-status-container card">
 				{status === "initializing" && (
 					<div className="status initializing">
 						<div className="spinner"></div>
@@ -155,15 +421,104 @@ function ConnectMobile() {
 					</div>
 				)}
 
+				{status === "no-session" && (
+					<div className="status manual-session">
+						<h2>Enter Session ID</h2>
+						<p>
+							Please enter the session ID displayed on your computer screen.
+						</p>
+
+						<form onSubmit={handleManualSessionSubmit}>
+							<div className="input-group">
+								<input
+									type="text"
+									value={manualSessionId}
+									onChange={(e) => setManualSessionId(e.target.value)}
+									placeholder="Enter session ID"
+								/>
+								<button type="submit" className="primary-button">
+									Connect
+								</button>
+							</div>
+							{error && <p className="error-message">{error}</p>}
+						</form>
+
+						<div className="instructions">
+							<h4>How to find your session ID:</h4>
+							<ol>
+								<li>On your computer, go to the "Connect Phone" page</li>
+								<li>Look for the "Session ID" in the Local Network section</li>
+								<li>Enter that code here to connect</li>
+							</ol>
+						</div>
+
+						<p className="connection-note">
+							<span className="warning-icon">⚠️</span> Make sure both devices
+							are connected to the same WiFi network.
+						</p>
+					</div>
+				)}
+
 				{status === "connecting" && (
 					<div className="status connecting">
 						<div className="spinner"></div>
 						<p>Connecting to CardboardHRV application...</p>
-						<p className="session-id">Session ID: {sessionId}</p>
+						<p className="session-id">
+							Session ID: {sessionId || manualSessionId}
+						</p>
 					</div>
 				)}
 
-				{status === "request-camera" && (
+				{!isSecureContext && (
+					<div className="status warning">
+						<div className="warning-icon">⚠️</div>
+						<h2>Security Warning</h2>
+						<p>This app needs to be accessed via HTTPS for camera access.</p>
+						<p>
+							You can continue without camera functionality, but heart rate
+							monitoring will not be available.
+						</p>
+						<div className="buttons">
+							<button
+								className="primary-button"
+								onClick={handleConnectWithoutCamera}
+							>
+								Continue without camera
+							</button>
+							<button className="secondary-button" onClick={handleGoBack}>
+								Go Back
+							</button>
+						</div>
+					</div>
+				)}
+
+				{isInIframe && (
+					<div className="status warning">
+						<div className="warning-icon">⚠️</div>
+						<h2>Iframe Detected</h2>
+						<p>
+							This app is running in an iframe, which may restrict camera
+							access.
+						</p>
+						<p>For best results, open this page directly in your browser.</p>
+						<div className="buttons">
+							<button
+								className="primary-button"
+								onClick={() => window.open(window.location.href, "_blank")}
+							>
+								Open in New Window
+							</button>
+							<button
+								className="secondary-button"
+								onClick={handleConnectWithoutCamera}
+							>
+								Continue Anyway
+							</button>
+						</div>
+					</div>
+				)}
+
+				{status === "request-camera" && !isInIframe && isSecureContext && (
 					<div className="status camera-request">
 						<h2>Connection Successful!</h2>
 						<p>To monitor your heart rate, we need access to your camera.</p>
@@ -171,7 +526,7 @@ function ConnectMobile() {
 							Please tap the button below and allow camera access when prompted.
 						</p>
 
-						<div className="camera-permission-info">
+						<div className="camera-permission-info card">
 							<p>
 								<strong>Why we need camera access:</strong>
 							</p>
@@ -202,9 +557,9 @@ function ConnectMobile() {
 								If you prefer not to grant camera access, you can{" "}
 								<button
 									className="text-button"
-									onClick={() => setStatus("connected-nocamera")}
+									onClick={handleConnectWithoutCamera}
 								>
-									skip this step
+									connect without camera
 								</button>
 								, but heart rate monitoring will not be available.
 							</small>
@@ -222,7 +577,7 @@ function ConnectMobile() {
 							muted
 							className="camera-test-video"
 						/>
-						<p>Camera is working! Continuing in a moment...</p>
+						<p>Camera is working! Connecting to main application...</p>
 					</div>
 				)}
 
@@ -231,17 +586,32 @@ function ConnectMobile() {
 						<div className="success-icon">✓</div>
 						<h2>Successfully Connected!</h2>
 						<p>Your phone is now connected to the CardboardHRV application.</p>
-						<p>
-							Please place your phone in the Cardboard VR headset to begin
-							monitoring.
-						</p>
-						<p className="instruction">
-							Make sure the camera is aligned with the optical fiber attachment.
-						</p>
+
+						<div className="camera-feed-container">
+							<h3>Camera Feed</h3>
+							<video
+								ref={videoRef}
+								autoPlay
+								playsInline
+								muted
+								className="camera-feed-video"
+							/>
+							<canvas ref={canvasRef} style={{ display: "none" }} />
+						</div>
+
+						<div className="heart-rate-display">
+							<h3>Current Heart Rate</h3>
+							<div className="heart-rate-value">
+								<span className="value">{heartRate}</span>
+								<span className="unit">BPM</span>
+							</div>
+						</div>
+
+						<p className="connection-info">{connectionInfo}</p>
 
 						<div className="buttons">
 							<button className="primary-button" onClick={handleGoBack}>
-								Close This Page
+								Disconnect
 							</button>
 						</div>
 					</div>
@@ -257,7 +627,7 @@ function ConnectMobile() {
 						</p>
 
 						{cameraPermission === "denied" && (
-							<div className="camera-permission-info">
+							<div className="camera-permission-info card">
 								<p>
 									Heart rate monitoring requires camera access to capture the
 									PPG signal.
@@ -267,9 +637,9 @@ function ConnectMobile() {
 								</p>
 								<ol className="browser-instructions">
 									<li>Tap the lock/info icon in the address bar</li>
-									<li>Select "Site settings"</li>
-									<li>Find "Camera" and change it to "Allow"</li>
-									<li>Refresh this page</li>
+									<li>Select "Site settings" {"->"} Camera</li>
+									<li>Make sure this site is not blocked</li>
+									<li>Return to this page and try again</li>
 								</ol>
 
 								<div className="chrome-settings-note">
@@ -311,11 +681,29 @@ function ConnectMobile() {
 						)}
 
 						{!cameraSupported && (
-							<p>
-								Your browser doesn't support camera access. Please try using
-								Chrome, Safari, or Firefox.
-							</p>
+							<>
+								<p>
+									Your browser doesn't appear to support camera access or the
+									camera is not available.
+								</p>
+								<p className="browser-info">{browserInfo}</p>
+								<div className="buttons">
+									<button
+										className="primary-button"
+										onClick={handleRequestCameraPermission}
+									>
+										Try Camera Access Anyway
+									</button>
+								</div>
+							</>
 						)}
+
+						<div className="connection-status-message">
+							<p>Your phone is still connected to the main application.</p>
+							<p>
+								Please check your computer screen to see the connection status.
+							</p>
+						</div>
 
 						<div className="buttons">
 							<button className="primary-button" onClick={handleGoBack}>
