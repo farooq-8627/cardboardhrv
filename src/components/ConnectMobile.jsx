@@ -12,6 +12,7 @@ function ConnectMobile() {
 	const streamRef = useRef(null);
 	const frameProcessingRef = useRef(null);
 	const [hasCameraAccess, setHasCameraAccess] = useState(false);
+	const [isRecording, setIsRecording] = useState(false);
 
 	const {
 		sessionId,
@@ -19,7 +20,6 @@ function ConnectMobile() {
 		deviceInfo,
 		initializeConnection,
 		cleanup,
-		isRecording,
 		handleCameraFrame,
 	} = useAppContext();
 
@@ -56,26 +56,6 @@ function ConnectMobile() {
 			stopCamera();
 		};
 	}, [searchParams, navigate, initializeConnection, cleanup]);
-
-	// Stop camera function
-	const stopCamera = useCallback(() => {
-		if (frameProcessingRef.current) {
-			cancelAnimationFrame(frameProcessingRef.current);
-			frameProcessingRef.current = null;
-		}
-
-		if (streamRef.current) {
-			const tracks = streamRef.current.getTracks();
-			tracks.forEach((track) => track.stop());
-			streamRef.current = null;
-		}
-		if (videoRef.current) {
-			videoRef.current.srcObject = null;
-		}
-		localStorage.setItem("cardboardhrv-was-recording", "false");
-		processingRef.current = false;
-		setHasCameraAccess(false);
-	}, []);
 
 	// Process frame function
 	const processFrame = useCallback(() => {
@@ -119,19 +99,41 @@ function ConnectMobile() {
 				rawData: redAvg,
 			});
 
-			// Send camera frame more frequently (every 3-4 frames)
-			if (Math.random() < 0.3) {
-				const smallCanvas = document.createElement("canvas");
-				const smallCtx = smallCanvas.getContext("2d");
-				smallCanvas.width = 320; // Increased resolution
-				smallCanvas.height = 240;
-				smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
-				const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.7); // Better quality
+			// Create frame data
+			const smallCanvas = document.createElement("canvas");
+			const smallCtx = smallCanvas.getContext("2d");
+			smallCanvas.width = 320;
+			smallCanvas.height = 240;
+			smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
+			const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.7);
+			const timestamp = Date.now();
 
-				// Send frame both through context and connection service
-				handleCameraFrame({ imageData: frameDataUrl, timestamp: Date.now() });
-				connectionService.sendCameraFrame(frameDataUrl);
-			}
+			// Send frame through both channels
+			console.log(
+				"Sending camera frame at:",
+				new Date(timestamp).toLocaleTimeString()
+			);
+
+			const frameData = {
+				imageData: frameDataUrl,
+				timestamp: timestamp,
+				deviceId: connectionService.deviceId,
+				type: "cameraFrame",
+				sessionId: sessionId,
+			};
+
+			// Send via context
+			handleCameraFrame(frameData);
+
+			// Send via Firebase
+			connectionService
+				.sendCameraFrame(frameData)
+				.then(() => {
+					console.log("Frame sent successfully");
+				})
+				.catch((error) => {
+					console.error("Error sending frame:", error);
+				});
 
 			processingRef.current = false;
 			if (streamRef.current) {
@@ -141,27 +143,36 @@ function ConnectMobile() {
 			console.error("Error processing frame:", error);
 			processingRef.current = false;
 		}
-	}, [handleCameraFrame]);
+	}, [handleCameraFrame, sessionId]);
 
 	// Function to start streaming camera data
 	const startStreaming = useCallback(
 		(stream) => {
 			if (!stream || !videoRef.current || !canvasRef.current) return;
 
+			console.log("Starting camera stream...");
 			const video = videoRef.current;
 			video.srcObject = stream;
 			streamRef.current = stream;
 
 			video.onloadedmetadata = () => {
+				console.log("Video metadata loaded, starting playback...");
 				video.play().catch((error) => {
 					console.error("Error playing video:", error);
 				});
 				processFrame();
+				setIsRecording(true);
+			};
+
+			video.onplay = () => {
+				console.log("Video playback started");
+				setIsRecording(true);
 			};
 
 			// Add error handling for video
 			video.onerror = (error) => {
 				console.error("Video error:", error);
+				setIsRecording(false);
 			};
 		},
 		[processFrame]
@@ -181,14 +192,37 @@ function ConnectMobile() {
 			startStreaming(stream);
 			localStorage.setItem("cardboardhrv-was-recording", "true");
 			setHasCameraAccess(true);
+			setIsRecording(true);
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
 			localStorage.setItem("cardboardhrv-was-recording", "false");
 			setHasCameraAccess(false);
+			setIsRecording(false);
 			return false;
 		}
 	}, [startStreaming]);
+
+	// Stop camera function
+	const stopCamera = useCallback(() => {
+		if (frameProcessingRef.current) {
+			cancelAnimationFrame(frameProcessingRef.current);
+			frameProcessingRef.current = null;
+		}
+
+		if (streamRef.current) {
+			const tracks = streamRef.current.getTracks();
+			tracks.forEach((track) => track.stop());
+			streamRef.current = null;
+		}
+		if (videoRef.current) {
+			videoRef.current.srcObject = null;
+		}
+		localStorage.setItem("cardboardhrv-was-recording", "false");
+		processingRef.current = false;
+		setHasCameraAccess(false);
+		setIsRecording(false);
+	}, []);
 
 	const handleGoBack = useCallback(() => {
 		stopCamera();

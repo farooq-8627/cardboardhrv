@@ -95,6 +95,13 @@ export function AppProvider({ children }) {
 
 	const handleCameraFrame = useCallback((data) => {
 		if (data.imageData) {
+			console.log(
+				"Frame received in context:",
+				new Date(data.timestamp).toLocaleTimeString(),
+				"from device:",
+				data.deviceId
+			);
+
 			// Update frame immediately
 			setCameraFrame(data.imageData);
 			setLastFrameTime(data.timestamp);
@@ -106,19 +113,22 @@ export function AppProvider({ children }) {
 				clearTimeout(recordingTimeoutRef.current);
 			}
 
-			// Set new timeout
+			// Set new timeout for 2 seconds (reduced from 5 seconds)
 			recordingTimeoutRef.current = setTimeout(() => {
 				if (!document.hidden) {
+					console.log(
+						"No frames received for 2 seconds, marking as not recording"
+					);
 					setIsRecording(false);
 					localStorage.setItem("cardboardhrv-was-recording", "false");
+					// Clear the camera frame if no new frames received
+					setCameraFrame(null);
 				}
-			}, 5000);
-
-			// Log frame received for debugging
-			console.log(
-				"Camera frame received:",
-				new Date(data.timestamp).toLocaleTimeString()
-			);
+			}, 2000);
+		} else {
+			console.warn("Received camera frame data without imageData");
+			setIsRecording(false);
+			localStorage.setItem("cardboardhrv-was-recording", "false");
 		}
 	}, []);
 

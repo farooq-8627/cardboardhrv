@@ -59,10 +59,13 @@ function LiveMonitor() {
 		const setupConnection = async () => {
 			const success = await initializeConnection(urlSessionId, "desktop");
 			if (success) {
+				console.log("Setting up camera frame listeners...");
 				// Set up listener for camera frames
 				if (connectionService.useDirectConnection) {
+					console.log("Using direct connection for camera frames");
 					window.addEventListener("message", handleDirectMessage);
 				} else {
+					console.log("Using Firebase for camera frames");
 					const database = connectionService.getDatabase();
 					if (database) {
 						const frameRef = ref(
@@ -71,10 +74,17 @@ function LiveMonitor() {
 						);
 						onValue(frameRef, (snapshot) => {
 							const frameData = snapshot.val();
+							console.log("Received frame data:", frameData ? "yes" : "no");
 							if (frameData && frameData.imageData) {
+								console.log(
+									"Processing frame from Firebase at:",
+									new Date().toLocaleTimeString()
+								);
 								handleCameraFrame(frameData);
 							}
 						});
+					} else {
+						console.error("Firebase database not available");
 					}
 				}
 
@@ -107,6 +117,10 @@ function LiveMonitor() {
 			return;
 
 		if (data.type === "cameraFrame") {
+			console.log(
+				"Processing frame from direct message at:",
+				new Date().toLocaleTimeString()
+			);
 			handleCameraFrame(data);
 		}
 	};
@@ -256,20 +270,40 @@ function LiveMonitor() {
 								}}
 							>
 								{cameraFrame ? (
-									<img
-										src={cameraFrame}
-										alt="Camera Feed"
-										style={{
-											maxWidth: "100%",
-											maxHeight: "100%",
-											objectFit: "contain",
-											display: "block",
-										}}
-										onError={(e) => {
-											console.error("Error loading camera frame:", e);
-											e.target.style.display = "none";
-										}}
-									/>
+									<>
+										<img
+											src={cameraFrame}
+											alt="Camera Feed"
+											style={{
+												maxWidth: "100%",
+												maxHeight: "100%",
+												objectFit: "contain",
+												display: "block",
+											}}
+											onLoad={() => console.log("Frame loaded successfully")}
+											onError={(e) => {
+												console.error("Error loading camera frame:", e);
+												e.target.style.display = "none";
+											}}
+										/>
+										{lastFrameTime && Date.now() - lastFrameTime > 5000 && (
+											<div
+												style={{
+													position: "absolute",
+													top: "50%",
+													left: "50%",
+													transform: "translate(-50%, -50%)",
+													backgroundColor: "rgba(0, 0, 0, 0.7)",
+													color: "white",
+													padding: "8px 16px",
+													borderRadius: "4px",
+													fontSize: "0.9rem",
+												}}
+											>
+												Frame frozen - Check mobile connection
+											</div>
+										)}
+									</>
 								) : (
 									<div
 										style={{
@@ -324,6 +358,20 @@ function LiveMonitor() {
 										></div>
 										REC
 									</div>
+								)}
+							</div>
+							<div
+								style={{
+									marginTop: "0.5rem",
+									fontSize: "0.8rem",
+									color: "#666",
+								}}
+							>
+								{connectionStatus === "connected" && !cameraFrame && (
+									<p>
+										If no camera feed appears, please check that camera access
+										is granted on your mobile device.
+									</p>
 								)}
 							</div>
 						</div>
