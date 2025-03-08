@@ -23,6 +23,36 @@ function ConnectMobile() {
 	const [isSecureContext, setIsSecureContext] = useState(true);
 	const [isInIframe, setIsInIframe] = useState(false);
 
+	// Store the session ID in localStorage to keep it consistent
+	useEffect(() => {
+		if (sessionId) {
+			try {
+				// Store the session ID in localStorage
+				localStorage.setItem("cardboardhrv-mobile-session-id", sessionId);
+				console.log("Stored session ID in localStorage:", sessionId);
+			} catch (e) {
+				console.error("Failed to store session ID in localStorage:", e);
+			}
+		} else {
+			// Try to retrieve from localStorage if not in URL
+			try {
+				const storedSessionId = localStorage.getItem(
+					"cardboardhrv-mobile-session-id"
+				);
+				if (storedSessionId) {
+					console.log(
+						"Retrieved session ID from localStorage:",
+						storedSessionId
+					);
+					// Navigate to the same page but with the session ID in the URL
+					navigate(`/mobile?session=${storedSessionId}`, { replace: true });
+				}
+			} catch (e) {
+				console.error("Failed to retrieve session ID from localStorage:", e);
+			}
+		}
+	}, [sessionId, navigate]);
+
 	// Check for secure context and iframe on mount
 	useEffect(() => {
 		// Check if we're in a secure context (required for camera access in modern browsers)
@@ -237,9 +267,21 @@ function ConnectMobile() {
 		try {
 			// Create a URL to the monitor page with connection parameters
 			const baseUrl = window.location.origin;
-			const monitorUrl = `${baseUrl}/monitor?directConnect=true&sessionId=${
-				sessionId || manualSessionId
-			}&timestamp=${Date.now()}`;
+			let finalSessionId = sessionId || manualSessionId;
+			// Try to get from localStorage if not available
+			if (!finalSessionId) {
+				try {
+					const storedSessionId = localStorage.getItem(
+						"cardboardhrv-mobile-session-id"
+					);
+					if (storedSessionId) {
+						finalSessionId = storedSessionId;
+					}
+				} catch (e) {
+					console.error("Failed to retrieve session ID from localStorage:", e);
+				}
+			}
+			const monitorUrl = `${baseUrl}/monitor?directConnect=true&sessionId=${finalSessionId}&timestamp=${Date.now()}`;
 
 			// Open the monitor URL in a new tab/window
 			window.open(monitorUrl, "_blank");
@@ -647,6 +689,21 @@ function ConnectMobile() {
 							Please tap the button below and allow camera access when prompted.
 						</p>
 
+						<div
+							style={{
+								backgroundColor: "#f8d7da",
+								color: "#721c24",
+								padding: "1rem",
+								borderRadius: "4px",
+								marginTop: "1rem",
+								marginBottom: "1rem",
+								textAlign: "center",
+								fontWeight: "bold",
+							}}
+						>
+							👇 Tap the blue button below to allow camera access 👇
+						</div>
+
 						<div className="camera-permission-info card">
 							<p>
 								<strong>Why we need camera access:</strong>
@@ -667,24 +724,57 @@ function ConnectMobile() {
 						</div>
 
 						<button
-							className="primary-button camera-button"
 							onClick={handleRequestCameraPermission}
+							style={{
+								padding: "1rem",
+								marginTop: "1rem",
+								backgroundColor: "#007bff",
+								color: "white",
+								border: "none",
+								borderRadius: "4px",
+								fontSize: "1.1rem",
+								fontWeight: "bold",
+								width: "100%",
+								boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+								cursor: "pointer",
+							}}
 						>
 							Allow Camera Access
 						</button>
 
-						<p className="skip-note">
-							<small>
-								If you prefer not to grant camera access, you can{" "}
-								<button
-									className="text-button"
-									onClick={handleConnectWithoutCamera}
-								>
-									connect without camera
-								</button>
-								, but heart rate monitoring will not be available.
-							</small>
-						</p>
+						<div
+							style={{
+								marginTop: "1rem",
+								padding: "1rem",
+								backgroundColor: "#f8f9fa",
+								borderRadius: "4px",
+								textAlign: "center",
+							}}
+						>
+							<p style={{ marginBottom: "0.5rem" }}>
+								If you prefer not to grant camera access:
+							</p>
+							<button
+								onClick={handleConnectWithoutCamera}
+								style={{
+									padding: "0.75rem",
+									backgroundColor: "#6c757d",
+									color: "white",
+									border: "none",
+									borderRadius: "4px",
+									fontWeight: "bold",
+									width: "100%",
+									marginBottom: "0.5rem",
+									cursor: "pointer",
+								}}
+							>
+								Connect Without Camera
+							</button>
+							<p style={{ fontSize: "0.8rem", color: "#dc3545" }}>
+								Note: Heart rate monitoring will not be available without camera
+								access.
+							</p>
+						</div>
 					</div>
 				)}
 
@@ -789,10 +879,21 @@ function ConnectMobile() {
 
 								<div className="buttons">
 									<button
-										className="primary-button"
 										onClick={handleRequestCameraPermission}
+										style={{
+											padding: "0.75rem",
+											marginTop: "0.5rem",
+											backgroundColor: "#007bff",
+											color: "white",
+											border: "none",
+											borderRadius: "4px",
+											fontWeight: "bold",
+											width: "100%",
+											boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+											cursor: "pointer",
+										}}
 									>
-										Try Again
+										Try Camera Access Anyway
 									</button>
 									<button className="secondary-button" onClick={handleRetry}>
 										Refresh Page

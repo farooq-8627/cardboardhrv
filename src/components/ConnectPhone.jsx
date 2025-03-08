@@ -18,7 +18,7 @@ function ConnectPhone({
 	const qrValueRef = useRef(null);
 
 	useEffect(() => {
-		// Only generate the QR code URL once when the component mounts or sessionId changes
+		// Generate the QR code URL only once when the component mounts
 		if (!qrValueRef.current && sessionId) {
 			// Get the current hostname/IP
 			const hostname = window.location.hostname;
@@ -29,9 +29,33 @@ function ConnectPhone({
 			const baseUrl = `${protocol}//${hostname}${port ? ":" + port : ""}`;
 			const mobileUrl = `${baseUrl}/mobile?session=${sessionId}`;
 
+			console.log("Generated QR code URL with session ID:", sessionId);
 			setQrValue(mobileUrl);
 			qrValueRef.current = mobileUrl;
 			setLocalIp(hostname);
+
+			// Store the QR value in sessionStorage to keep it consistent across tab changes
+			try {
+				sessionStorage.setItem("cardboardhrv-qr-value", mobileUrl);
+			} catch (e) {
+				console.error("Failed to store QR value in sessionStorage:", e);
+			}
+		} else if (!qrValueRef.current) {
+			// Try to retrieve from sessionStorage if not set yet
+			try {
+				const storedQrValue = sessionStorage.getItem("cardboardhrv-qr-value");
+				if (storedQrValue) {
+					console.log("Retrieved QR code URL from sessionStorage");
+					setQrValue(storedQrValue);
+					qrValueRef.current = storedQrValue;
+
+					// Extract hostname from the stored URL
+					const url = new URL(storedQrValue);
+					setLocalIp(url.hostname);
+				}
+			} catch (e) {
+				console.error("Failed to retrieve QR value from sessionStorage:", e);
+			}
 		}
 
 		// If already connected, redirect to monitor

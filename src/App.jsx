@@ -29,9 +29,26 @@ function App() {
 		// Initialize the WebSocket service
 		websocketService.initialize();
 
-		// Generate a unique session ID
-		const newSessionId = generateSessionId();
-		setSessionId(newSessionId);
+		// Get or create a persistent session ID
+		let persistentSessionId;
+		try {
+			// Try to get the session ID from localStorage
+			persistentSessionId = localStorage.getItem("cardboardhrv-session-id");
+
+			// If it doesn't exist, generate a new one and store it
+			if (!persistentSessionId) {
+				persistentSessionId = generateSessionId();
+				localStorage.setItem("cardboardhrv-session-id", persistentSessionId);
+			}
+
+			console.log("Using persistent session ID:", persistentSessionId);
+			setSessionId(persistentSessionId);
+		} catch (e) {
+			// If localStorage fails, fall back to a regular session ID
+			console.error("Failed to use localStorage for session ID:", e);
+			const newSessionId = generateSessionId();
+			setSessionId(newSessionId);
+		}
 
 		// Set up event listeners for WebSocket events
 		websocketService.on("session", handleSessionEvent);
