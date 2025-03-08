@@ -779,16 +779,73 @@ function ConnectMobile() {
 				)}
 
 				{showCameraTest && (
-					<div className="camera-test-container">
-						<p>Camera test in progress...</p>
-						<video
-							ref={videoRef}
-							autoPlay
-							playsInline
-							muted
-							className="camera-test-video"
-						/>
-						<p>Camera is working! Connecting to main application...</p>
+					<div
+						className="camera-test-container"
+						style={{
+							padding: "1rem",
+							backgroundColor: "#f8f9fa",
+							borderRadius: "8px",
+							textAlign: "center",
+						}}
+					>
+						<h3 style={{ color: "#28a745", marginBottom: "1rem" }}>
+							Camera Test in Progress
+						</h3>
+						<div
+							style={{
+								position: "relative",
+								width: "100%",
+								maxWidth: "320px",
+								margin: "0 auto",
+								border: "3px solid #28a745",
+								borderRadius: "8px",
+								overflow: "hidden",
+							}}
+						>
+							<video
+								ref={videoRef}
+								autoPlay
+								playsInline
+								muted
+								style={{ width: "100%", height: "auto", display: "block" }}
+							/>
+							<div
+								style={{
+									position: "absolute",
+									top: "10px",
+									right: "10px",
+									backgroundColor: "rgba(255,0,0,0.7)",
+									width: "15px",
+									height: "15px",
+									borderRadius: "50%",
+									animation: "pulse 1s infinite",
+								}}
+							></div>
+						</div>
+						<p style={{ marginTop: "1rem", fontWeight: "bold" }}>
+							Camera is working! Processing video feed...
+						</p>
+						<div style={{ marginTop: "1rem" }}>
+							<button
+								onClick={() => {
+									setShowCameraTest(false);
+									setCameraPermission("granted");
+									setStatus("connected");
+									if (cameraStream) startStreaming(cameraStream);
+								}}
+								style={{
+									padding: "0.75rem 1.5rem",
+									backgroundColor: "#28a745",
+									color: "white",
+									border: "none",
+									borderRadius: "4px",
+									fontWeight: "bold",
+									cursor: "pointer",
+								}}
+							>
+								Continue to Connection
+							</button>
+						</div>
 					</div>
 				)}
 
@@ -798,16 +855,52 @@ function ConnectMobile() {
 						<h2>Successfully Connected!</h2>
 						<p>Your phone is now connected to the CardboardHRV application.</p>
 
-						<div className="camera-feed-container">
-							<h3>Camera Feed</h3>
-							<video
-								ref={videoRef}
-								autoPlay
-								playsInline
-								muted
-								className="camera-feed-video"
-							/>
-							<canvas ref={canvasRef} style={{ display: "none" }} />
+						<div className="camera-feed-container" style={{ margin: "1rem 0" }}>
+							<h3 style={{ textAlign: "center", marginBottom: "0.5rem" }}>
+								Camera Feed
+							</h3>
+							<div
+								style={{
+									position: "relative",
+									width: "100%",
+									maxWidth: "320px",
+									margin: "0 auto",
+									border: "3px solid #28a745",
+									borderRadius: "8px",
+									overflow: "hidden",
+								}}
+							>
+								<video
+									ref={videoRef}
+									autoPlay
+									playsInline
+									muted
+									style={{ width: "100%", height: "auto", display: "block" }}
+								/>
+								<canvas ref={canvasRef} style={{ display: "none" }} />
+								<div
+									style={{
+										position: "absolute",
+										top: "10px",
+										right: "10px",
+										backgroundColor: "rgba(255,0,0,0.7)",
+										width: "15px",
+										height: "15px",
+										borderRadius: "50%",
+										animation: "pulse 1s infinite",
+									}}
+								></div>
+							</div>
+							<p
+								style={{
+									textAlign: "center",
+									marginTop: "0.5rem",
+									fontSize: "0.9rem",
+									color: "#666",
+								}}
+							>
+								Your camera is active and processing heart rate data
+							</p>
 						</div>
 
 						<div className="heart-rate-display">
@@ -1017,6 +1110,36 @@ function ConnectMobile() {
 						</div>
 					</div>
 				)}
+			</div>
+
+			<div
+				style={{
+					position: "fixed",
+					bottom: "20px",
+					left: "0",
+					right: "0",
+					padding: "1rem",
+					backgroundColor: "rgba(40, 167, 69, 0.9)",
+					textAlign: "center",
+					zIndex: "1000",
+				}}
+			>
+				<button
+					onClick={redirectToMonitor}
+					style={{
+						padding: "1rem 2rem",
+						backgroundColor: "white",
+						color: "#28a745",
+						border: "none",
+						borderRadius: "4px",
+						fontWeight: "bold",
+						fontSize: "1.1rem",
+						boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+						cursor: "pointer",
+					}}
+				>
+					Open Monitor on Computer
+				</button>
 			</div>
 		</div>
 	);
