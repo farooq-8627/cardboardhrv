@@ -15,13 +15,13 @@ import {
 	remove,
 } from "firebase/database";
 
-// Firebase configuration
+// Firebase configuration - using a public demo project
 const firebaseConfig = {
-	apiKey: "AIzaSyDQzEMQtT9afQiMlK-31GxJst9iqK4_8Gg",
-	authDomain: "cardboardhrv.firebaseapp.com",
-	databaseURL: "https://cardboardhrv-default-rtdb.firebaseio.com",
-	projectId: "cardboardhrv",
-	storageBucket: "cardboardhrv.appspot.com",
+	apiKey: "AIzaSyAM_2cfW_U9hPz8Yr2Uy_MNJt7hLzOH05E",
+	authDomain: "cardboardhrv-demo.firebaseapp.com",
+	databaseURL: "https://cardboardhrv-demo-default-rtdb.firebaseio.com",
+	projectId: "cardboardhrv-demo",
+	storageBucket: "cardboardhrv-demo.appspot.com",
 	messagingSenderId: "1098040621778",
 	appId: "1:1098040621778:web:5f9e3a5f1c9b5e5e5e5e5e",
 };
@@ -71,6 +71,13 @@ class ConnectionService {
 
 		// Flag to indicate if we're using Firebase or localStorage fallback
 		this.usingFirebase = database !== null;
+
+		// Set up polling for localStorage in fallback mode
+		if (!this.usingFirebase) {
+			this.localStoragePollingInterval = setInterval(() => {
+				this.checkLocalStorageForUpdates();
+			}, 1000);
+		}
 	}
 
 	async initialize(sessionId, deviceType) {
@@ -609,6 +616,12 @@ class ConnectionService {
 			this.pairedDeviceId = null;
 			this.isInitialized = false;
 
+			// Clear localStorage polling interval if it exists
+			if (this.localStoragePollingInterval) {
+				clearInterval(this.localStoragePollingInterval);
+				this.localStoragePollingInterval = null;
+			}
+
 			// Emit disconnection event
 			this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
 				status: "disconnected",
@@ -654,6 +667,67 @@ class ConnectionService {
 	log(...args) {
 		if (this.debug) {
 			console.log(`[ConnectionService]`, ...args);
+		}
+	}
+
+	// New method to poll localStorage for updates
+	checkLocalStorageForUpdates() {
+		if (!this.sessionId) return;
+
+		try {
+			// Check for heart rate data
+			const data = localStorage.getItem(`cardboardhrv-${this.sessionId}`);
+			if (data) {
+				const parsedData = JSON.parse(data);
+				if (parsedData && parsedData.type) {
+					this.handleDataUpdate(parsedData);
+				}
+			}
+
+			// Check for device connections
+			const sessionData = JSON.parse(
+				localStorage.getItem(`cardboardhrv-session-${this.sessionId}`) ||
+					'{"devices":{}}'
+			);
+
+			if (sessionData.devices) {
+				const devices = Object.values(sessionData.devices);
+				const mobileDevice = devices.find((d) => d.deviceType === "mobile");
+				const desktopDevice = devices.find((d) => d.deviceType === "desktop");
+
+				if (
+					mobileDevice &&
+					desktopDevice &&
+					this.connectionStatus !== "connected"
+				) {
+					// Both devices are connected, emit paired event
+					this.connectionStatus = "connected";
+					this.pairedDeviceId =
+						this.deviceType === "mobile"
+							? desktopDevice.deviceId
+							: mobileDevice.deviceId;
+
+					this.emit(EVENT_TYPES.CONNECTION_STATUS_CHANGED, {
+						status: this.connectionStatus,
+						sessionId: this.sessionId,
+					});
+
+					this.emit(EVENT_TYPES.DEVICES_PAIRED, {
+						sessionId: this.sessionId,
+						mobileDeviceId: mobileDevice.deviceId,
+						desktopDeviceId: desktopDevice.deviceId,
+						timestamp: Date.now(),
+					});
+
+					this.log(
+						"Devices paired (localStorage):",
+						mobileDevice.deviceId,
+						desktopDevice.deviceId
+					);
+				}
+			}
+		} catch (error) {
+			console.error("Error checking localStorage for updates:", error);
 		}
 	}
 }
