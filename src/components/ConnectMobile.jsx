@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import connectionService from "../utils/connectionService";
+import "../styles/ConnectMobile.css";
 
 function ConnectMobile() {
 	const [searchParams] = useSearchParams();
@@ -15,54 +16,35 @@ function ConnectMobile() {
 	const [isRecording, setIsRecording] = useState(false);
 
 	const {
-		isConnected,
-		heartRateData,
-		currentHeartRate,
-		hrvMetrics,
 		sessionId,
 		connectionStatus,
 		deviceInfo,
-		cameraFrame,
-		lastFrameTime,
-		isRecording: appIsRecording,
 		initializeConnection,
 		handleCameraFrame,
 		cleanup,
+		syncRecordingStatus,
 	} = useAppContext();
 
-	// Initialize connection service when component mounts
-	useEffect(() => {
-		const urlSessionId =
-			searchParams.get("session") ||
-			localStorage.getItem("cardboardhrv-session-id");
-		if (!urlSessionId) {
-			navigate("/");
-			return;
+	// Stop camera function - define this first
+	const stopCamera = useCallback(() => {
+		if (frameProcessingRef.current) {
+			cancelAnimationFrame(frameProcessingRef.current);
+			frameProcessingRef.current = null;
 		}
 
-		const setupConnection = async () => {
-			const success = await initializeConnection(urlSessionId, "mobile");
-			if (!success) {
-				console.error("Failed to initialize connection service");
-				navigate("/");
-				return;
-			}
-
-			// If we were previously recording, try to restore camera access
-			const wasRecording =
-				localStorage.getItem("cardboardhrv-was-recording") === "true";
-			if (wasRecording) {
-				requestCameraPermission();
-			}
-		};
-
-		setupConnection();
-
-		return () => {
-			cleanup();
-			stopCamera();
-		};
-	}, [searchParams, navigate, initializeConnection, cleanup]);
+		if (streamRef.current) {
+			const tracks = streamRef.current.getTracks();
+			tracks.forEach((track) => track.stop());
+			streamRef.current = null;
+		}
+		if (videoRef.current) {
+			videoRef.current.srcObject = null;
+		}
+		localStorage.setItem("cardboardhrv-was-recording", "false");
+		processingRef.current = false;
+		setHasCameraAccess(false);
+		syncRecordingStatus(false);
+	}, [syncRecordingStatus]);
 
 	// Process frame function
 	const processFrame = useCallback(() => {
@@ -302,32 +284,52 @@ function ConnectMobile() {
 		}
 	}, [startStreaming, syncRecordingStatus]);
 
-	// Stop camera function
-	const stopCamera = useCallback(() => {
-		if (frameProcessingRef.current) {
-			cancelAnimationFrame(frameProcessingRef.current);
-			frameProcessingRef.current = null;
-		}
-
-		if (streamRef.current) {
-			const tracks = streamRef.current.getTracks();
-			tracks.forEach((track) => track.stop());
-			streamRef.current = null;
-		}
-		if (videoRef.current) {
-			videoRef.current.srcObject = null;
-		}
-		localStorage.setItem("cardboardhrv-was-recording", "false");
-		processingRef.current = false;
-		setHasCameraAccess(false);
-		syncRecordingStatus(false);
-	}, [syncRecordingStatus]);
-
 	const handleGoBack = useCallback(() => {
 		stopCamera();
 		cleanup();
 		navigate("/");
 	}, [stopCamera, cleanup, navigate]);
+
+	// Initialize connection service when component mounts
+	useEffect(() => {
+		const urlSessionId =
+			searchParams.get("session") ||
+			localStorage.getItem("cardboardhrv-session-id");
+		if (!urlSessionId) {
+			navigate("/");
+			return;
+		}
+
+		const setupConnection = async () => {
+			const success = await initializeConnection(urlSessionId, "mobile");
+			if (!success) {
+				console.error("Failed to initialize connection service");
+				navigate("/");
+				return;
+			}
+
+			// If we were previously recording, try to restore camera access
+			const wasRecording =
+				localStorage.getItem("cardboardhrv-was-recording") === "true";
+			if (wasRecording) {
+				requestCameraPermission();
+			}
+		};
+
+		setupConnection();
+
+		return () => {
+			cleanup();
+			stopCamera();
+		};
+	}, [
+		searchParams,
+		navigate,
+		initializeConnection,
+		cleanup,
+		stopCamera,
+		requestCameraPermission,
+	]);
 
 	// Handle visibility change
 	useEffect(() => {
@@ -355,12 +357,48 @@ function ConnectMobile() {
 
 			<div className="connection-status-container card">
 				{!sessionId ? (
-					<div className="error-message">
-						<h2>Error</h2>
-						<p>No session ID provided. Please go back and try again.</p>
-						<button className="primary-button" onClick={handleGoBack}>
-							Go Back
-						</button>
+					<div className="manual-session">
+						<h2>Enter Session ID</h2>
+						<p>Please enter the session ID shown on your desktop screen.</p>
+						<form
+							onSubmit={(e) => {
+								e.preventDefault();
+								const input = e.target.elements.sessionId;
+								const value = input.value.trim();
+								if (value) {
+									navigate(`/mobile?session=${value}`);
+								}
+							}}
+						>
+							<div className="input-group">
+								<input
+									type="text"
+									name="sessionId"
+									placeholder="Enter session ID"
+									pattern="[a-zA-Z0-9-]+"
+									required
+									autoComplete="off"
+								/>
+								<button type="submit" className="primary-button">
+									Connect
+								</button>
+							</div>
+						</form>
+						<div className="instructions">
+							<h4>Where to find the session ID?</h4>
+							<ol>
+								<li>Go to the desktop version of CardboardHRV</li>
+								<li>Click on "Connect Phone"</li>
+								<li>Look for the session ID displayed under the QR code</li>
+							</ol>
+						</div>
+						<div className="connection-note">
+							<p>
+								<span className="warning-icon">⚠️</span>
+								Make sure you're entering the session ID exactly as shown on
+								your desktop.
+							</p>
+						</div>
 					</div>
 				) : (
 					<>
