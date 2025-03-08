@@ -16,15 +16,16 @@ import {
 	onDisconnect,
 } from "firebase/database";
 
-// Firebase configuration - using a public test project
+// Firebase configuration - using the user's specific database
 const firebaseConfig = {
-	apiKey: "AIzaSyDLgOEV-lfqCJbwqvXxBDl37GpMXoNR5xM",
-	authDomain: "public-test-db-f498a.firebaseapp.com",
-	databaseURL: "https://public-test-db-f498a-default-rtdb.firebaseio.com",
-	projectId: "public-test-db-f498a",
-	storageBucket: "public-test-db-f498a.appspot.com",
-	messagingSenderId: "869896918632",
-	appId: "1:869896918632:web:e0f6d0f7a6d2b6d3e0f6d0",
+	apiKey: "AIzaSyDQzEMQtT9afQiMlK-31GxJst9iqK4_8Gg",
+	authDomain: "cardboardhrv.firebaseapp.com",
+	databaseURL:
+		"https://cardboardhrv-default-rtdb.asia-southeast1.firebasedatabase.app",
+	projectId: "cardboardhrv",
+	storageBucket: "cardboardhrv.appspot.com",
+	messagingSenderId: "1098040621778",
+	appId: "1:1098040621778:web:5f9e3a5f1c9b5e5e5e5e5e",
 };
 
 // Initialize Firebase with error handling
