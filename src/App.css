@@ -775,3 +775,26 @@ ul {
 	background-color: #e9ecef;
 	transform: translateY(-2px);
 }
+
+.qr-url {
+	font-family: monospace;
+	word-break: break-all;
+	max-width: 256px;
+	margin: 0.5rem auto;
+	background-color: rgba(0, 0, 0, 0.05);
+	padding: 0.5rem;
+	border-radius: 4px;
+}
+
+.connection-note {
+	margin-top: 1rem;
+	padding: 0.75rem;
+	background-color: #fff3cd;
+	border-left: 4px solid #ffc107;
+	border-radius: 4px;
+}
+
+.connection-note p {
+	margin: 0;
+	color: #856404;
+}

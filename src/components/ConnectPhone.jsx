@@ -1,39 +1,70 @@
 import React, { useState, useEffect } from "react";
 import QRCode from "qrcode.react";
+import { getLocalIP } from "../utils/getLocalIP";
 
 function ConnectPhone({ isConnected, onConnect }) {
 	const [connectionMethod, setConnectionMethod] = useState("qrcode");
 	const [qrValue, setQrValue] = useState("");
 	const [deviceId, setDeviceId] = useState("");
 	const [error, setError] = useState("");
-	const [ipAddress, setIpAddress] = useState("");
+	const [publicIpAddress, setPublicIpAddress] = useState("");
+	const [localIpAddress, setLocalIpAddress] = useState("");
+	const [networkUrl, setNetworkUrl] = useState("");
 
-	// Generate a session ID for QR code
+	// Generate a session ID for QR code and detect IP addresses
 	useEffect(() => {
-		const generateSessionId = () => {
-			const sessionId = Math.random().toString(36).substring(2, 15);
-			const baseUrl = window.location.origin;
-			// This URL will work both locally and when deployed
-			const connectionUrl = `${baseUrl}/connect-mobile?session=${sessionId}`;
-			console.log("Connection URL:", connectionUrl);
-			setQrValue(connectionUrl);
+		const sessionId = Math.random().toString(36).substring(2, 15);
 
-			// In a real implementation, you'd register this session with your backend
+		// Get local network IP address
+		const detectLocalIP = async () => {
+			try {
+				const localIP = await getLocalIP();
+				if (localIP) {
+					setLocalIpAddress(localIP);
+					console.log("Local Network IP detected:", localIP);
+
+					// Use the local network IP for the QR code
+					const port =
+						window.location.port ||
+						(window.location.protocol === "https:" ? "443" : "80");
+					const localNetworkUrl = `http://${localIP}:${port}`;
+					setNetworkUrl(localNetworkUrl);
+
+					const connectionUrl = `${localNetworkUrl}/connect-mobile?session=${sessionId}`;
+					console.log("Connection URL (local network):", connectionUrl);
+					setQrValue(connectionUrl);
+				} else {
+					// Fallback to window.location.origin if local IP detection fails
+					const baseUrl = window.location.origin;
+					const connectionUrl = `${baseUrl}/connect-mobile?session=${sessionId}`;
+					console.log("Connection URL (fallback):", connectionUrl);
+					setQrValue(connectionUrl);
+				}
+			} catch (error) {
+				console.error("Error detecting local IP:", error);
+
+				// Fallback to window.location.origin
+				const baseUrl = window.location.origin;
+				const connectionUrl = `${baseUrl}/connect-mobile?session=${sessionId}`;
+				console.log("Connection URL (fallback after error):", connectionUrl);
+				setQrValue(connectionUrl);
+			}
 		};
 
-		generateSessionId();
-
-		// Get local IP for direct connection
+		// Get public IP for information purposes
 		fetch("https://api.ipify.org?format=json")
 			.then((response) => response.json())
 			.then((data) => {
-				setIpAddress(data.ip);
-				console.log("IP Address detected:", data.ip);
+				setPublicIpAddress(data.ip);
+				console.log("Public IP Address detected:", data.ip);
 			})
 			.catch((error) => {
-				console.error("Error detecting IP:", error);
-				setIpAddress("Unable to detect");
+				console.error("Error detecting public IP:", error);
+				setPublicIpAddress("Unable to detect");
 			});
+
+		// Detect local IP
+		detectLocalIP();
 	}, []);
 
 	const handleConnect = () => {
@@ -104,6 +135,9 @@ function ConnectPhone({ isConnected, onConnect }) {
 									<div className="qrcode-container">
 										<QRCode value={qrValue} size={256} level="H" />
 									</div>
+									<p className="qr-url">
+										<small>URL: {qrValue}</small>
+									</p>
 									<p>
 										<small>
 											This will open a web page on your phone that will request
@@ -111,6 +145,12 @@ function ConnectPhone({ isConnected, onConnect }) {
 											application.
 										</small>
 									</p>
+									<div className="connection-note">
+										<p>
+											<strong>Note:</strong> Make sure your phone is on the same
+											WiFi network as this computer.
+										</p>
+									</div>
 								</div>
 							)}
 
@@ -140,9 +180,18 @@ function ConnectPhone({ isConnected, onConnect }) {
 										</ol>
 
 										<div className="local-connection">
-											<h4>Direct Connection</h4>
+											<h4>Connection Information</h4>
 											<p>
-												Your local IP address is: <strong>{ipAddress}</strong>
+												Your local network IP:{" "}
+												<strong>{localIpAddress || "Detecting..."}</strong>
+											</p>
+											<p>
+												Your public IP address:{" "}
+												<strong>{publicIpAddress || "Detecting..."}</strong>
+											</p>
+											<p>
+												For local network connection, use:{" "}
+												<strong>{networkUrl || "Detecting..."}</strong>
 											</p>
 											<p>
 												Enter this IP address in the CardboardHRV mobile app to
