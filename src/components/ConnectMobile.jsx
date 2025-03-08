@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import connectionService from "../utils/connectionService";
@@ -11,6 +11,7 @@ function ConnectMobile() {
 	const processingRef = useRef(false);
 	const streamRef = useRef(null);
 	const frameProcessingRef = useRef(null);
+	const [hasCameraAccess, setHasCameraAccess] = useState(false);
 
 	const {
 		sessionId,
@@ -41,7 +42,7 @@ function ConnectMobile() {
 			// If we were previously recording, try to restore camera access
 			const wasRecording =
 				localStorage.getItem("cardboardhrv-was-recording") === "true";
-			if (wasRecording && connectionStatus === "connected") {
+			if (wasRecording) {
 				requestCameraPermission();
 			}
 		};
@@ -71,6 +72,7 @@ function ConnectMobile() {
 		}
 		localStorage.setItem("cardboardhrv-was-recording", "false");
 		processingRef.current = false;
+		setHasCameraAccess(false);
 	}, []);
 
 	// Process frame function
@@ -166,10 +168,12 @@ function ConnectMobile() {
 
 			startStreaming(stream);
 			localStorage.setItem("cardboardhrv-was-recording", "true");
+			setHasCameraAccess(true);
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
 			localStorage.setItem("cardboardhrv-was-recording", "false");
+			setHasCameraAccess(false);
 			return false;
 		}
 	}, [startStreaming]);
@@ -186,7 +190,6 @@ function ConnectMobile() {
 			if (document.hidden) {
 				stopCamera();
 			} else if (
-				connectionStatus === "connected" &&
 				localStorage.getItem("cardboardhrv-was-recording") === "true"
 			) {
 				requestCameraPermission();
@@ -197,7 +200,7 @@ function ConnectMobile() {
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
-	}, [connectionStatus, stopCamera, requestCameraPermission]);
+	}, [stopCamera, requestCameraPermission]);
 
 	return (
 		<div className="connect-mobile">
@@ -222,36 +225,38 @@ function ConnectMobile() {
 							<span>{connectionStatus}</span>
 						</div>
 
-						{connectionStatus === "connected" ? (
-							<div className="camera-container">
-								<h3>Camera Feed</h3>
-								<div className="video-container">
-									<video
-										ref={videoRef}
-										autoPlay
-										playsInline
-										muted
-										style={{ width: "100%", height: "auto" }}
-									/>
-									<canvas ref={canvasRef} style={{ display: "none" }} />
+						<div className="camera-container">
+							{!hasCameraAccess ? (
+								<div className="camera-request">
+									<p>
+										To monitor your heart rate, we need access to your camera.
+									</p>
+									<button
+										className="primary-button"
+										onClick={requestCameraPermission}
+									>
+										Allow Camera Access
+									</button>
 								</div>
-								<button className="primary-button" onClick={handleGoBack}>
-									Disconnect
-								</button>
-							</div>
-						) : (
-							<div className="camera-request">
-								<p>
-									To monitor your heart rate, we need access to your camera.
-								</p>
-								<button
-									className="primary-button"
-									onClick={requestCameraPermission}
-								>
-									Allow Camera Access
-								</button>
-							</div>
-						)}
+							) : (
+								<>
+									<h3>Camera Feed</h3>
+									<div className="video-container">
+										<video
+											ref={videoRef}
+											autoPlay
+											playsInline
+											muted
+											style={{ width: "100%", height: "auto" }}
+										/>
+										<canvas ref={canvasRef} style={{ display: "none" }} />
+									</div>
+									<button className="primary-button" onClick={stopCamera}>
+										Stop Camera
+									</button>
+								</>
+							)}
+						</div>
 
 						{deviceInfo && (
 							<div className="connection-info">
@@ -259,6 +264,10 @@ function ConnectMobile() {
 								<p>Session ID: {sessionId}</p>
 							</div>
 						)}
+
+						<button className="primary-button" onClick={handleGoBack}>
+							Disconnect
+						</button>
 					</>
 				)}
 			</div>
