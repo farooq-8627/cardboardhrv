@@ -15,7 +15,9 @@ export function useAppContext() {
 }
 
 export function AppProvider({ children }) {
-	const [isConnected, setIsConnected] = useState(false);
+	const [isConnected, setIsConnected] = useState(() => {
+		return localStorage.getItem("cardboardhrv-connection-status") === "connected";
+	});
 	const [heartRateData, setHeartRateData] = useState([]);
 	const [currentHeartRate, setCurrentHeartRate] = useState(0);
 	const [hrvMetrics, setHrvMetrics] = useState({
@@ -29,9 +31,7 @@ export function AppProvider({ children }) {
 		return localStorage.getItem("cardboardhrv-session-id") || "";
 	});
 	const [connectionStatus, setConnectionStatus] = useState(() => {
-		return (
-			localStorage.getItem("cardboardhrv-connection-status") || "disconnected"
-		);
+		return localStorage.getItem("cardboardhrv-connection-status") || "disconnected";
 	});
 	const [deviceInfo, setDeviceInfo] = useState(() => {
 		const stored = localStorage.getItem("cardboardhrv-device-info");
@@ -39,34 +39,36 @@ export function AppProvider({ children }) {
 	});
 	const [cameraFrame, setCameraFrame] = useState(null);
 	const [lastFrameTime, setLastFrameTime] = useState(null);
-	const [isRecording, setIsRecording] = useState(false);
+	const [isRecording, setIsRecording] = useState(() => {
+		return localStorage.getItem("cardboardhrv-was-recording") === "true";
+	});
 
 	// Refs to prevent duplicate event listeners
 	const eventListenersSet = useRef(false);
 	const initializationInProgress = useRef(false);
+	const recordingTimeoutRef = useRef(null);
 
 	// Memoize event handlers to prevent recreating them on each render
 	const handleConnectionStatusChanged = useCallback((data) => {
-		setConnectionStatus(data.status);
-		setIsConnected(data.status === "connected");
-		localStorage.setItem("cardboardhrv-connection-status", data.status);
+		const newStatus = data.status;
+		setConnectionStatus(newStatus);
+		setIsConnected(newStatus === "connected");
+		localStorage.setItem("cardboardhrv-connection-status", newStatus);
 	}, []);
 
 	const handleDevicesPaired = useCallback((data) => {
 		setDeviceInfo(data);
 		localStorage.setItem("cardboardhrv-device-info", JSON.stringify(data));
+		// When devices are paired, ensure connection status is updated
+		setConnectionStatus("connected");
+		setIsConnected(true);
+		localStorage.setItem("cardboardhrv-connection-status", "connected");
 	}, []);
 
 	const handleHeartRateData = useCallback((data) => {
 		setCurrentHeartRate(data.heartRate);
 		setHeartRateData((prev) => {
-			const newData = [
-				...prev,
-				{
-					timestamp: data.timestamp,
-					value: data.heartRate,
-				},
-			];
+			const newData = [...prev, { timestamp: data.timestamp, value: data.heartRate }];
 			return newData.slice(-60);
 		});
 
@@ -89,10 +91,19 @@ export function AppProvider({ children }) {
 			setCameraFrame(data.imageData);
 			setLastFrameTime(data.timestamp);
 			setIsRecording(true);
+			localStorage.setItem("cardboardhrv-was-recording", "true");
 
-			clearTimeout(window.recordingTimeout);
-			window.recordingTimeout = setTimeout(() => {
-				setIsRecording(false);
+			// Clear existing timeout
+			if (recordingTimeoutRef.current) {
+				clearTimeout(recordingTimeoutRef.current);
+			}
+
+			// Set new timeout
+			recordingTimeoutRef.current = setTimeout(() => {
+				if (!document.hidden) {
+					setIsRecording(false);
+					localStorage.setItem("cardboardhrv-was-recording", "false");
+				}
 			}, 5000);
 		}
 	}, []);
@@ -101,10 +112,7 @@ export function AppProvider({ children }) {
 	const setupEventListeners = useCallback(() => {
 		if (eventListenersSet.current) return;
 
-		connectionService.on(
-			"connectionStatusChanged",
-			handleConnectionStatusChanged
-		);
+		connectionService.on("connectionStatusChanged", handleConnectionStatusChanged);
 		connectionService.on("devicesPaired", handleDevicesPaired);
 		connectionService.on("heartRateData", handleHeartRateData);
 
@@ -112,72 +120,66 @@ export function AppProvider({ children }) {
 	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
 
 	// Initialize connection service
-	const initializeConnection = useCallback(
-		async (newSessionId, deviceType) => {
-			if (!newSessionId || initializationInProgress.current) return false;
+	const initializeConnection = useCallback(async (newSessionId, deviceType) => {
+		if (!newSessionId || initializationInProgress.current) return false;
 
-			try {
-				initializationInProgress.current = true;
-				setupEventListeners();
+		try {
+			initializationInProgress.current = true;
+			setupEventListeners();
 
-				const success = await connectionService.initialize(
-					newSessionId,
-					deviceType
-				);
-				if (success) {
-					setSessionId(newSessionId);
-					localStorage.setItem("cardboardhrv-session-id", newSessionId);
-					return true;
-				}
-				return false;
-			} finally {
-				initializationInProgress.current = false;
+			const success = await connectionService.initialize(newSessionId, deviceType);
+			if (success) {
+				setSessionId(newSessionId);
+				localStorage.setItem("cardboardhrv-session-id", newSessionId);
+				return true;
 			}
-		},
-		[setupEventListeners]
-	);
+			return false;
+		} finally {
+			initializationInProgress.current = false;
+		}
+	}, [setupEventListeners]);
 
 	// Clean up function
 	const cleanup = useCallback(() => {
 		if (!eventListenersSet.current) return;
 
-		connectionService.off(
-			"connectionStatusChanged",
-			handleConnectionStatusChanged
-		);
+		connectionService.off("connectionStatusChanged", handleConnectionStatusChanged);
 		connectionService.off("devicesPaired", handleDevicesPaired);
 		connectionService.off("heartRateData", handleHeartRateData);
 
-		clearTimeout(window.recordingTimeout);
+		if (recordingTimeoutRef.current) {
+			clearTimeout(recordingTimeoutRef.current);
+		}
 		eventListenersSet.current = false;
 	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
 
-	// Initial connection setup
+	// Initial connection setup and visibility change handler
 	useEffect(() => {
-		if (sessionId && !eventListenersSet.current) {
+		const handleVisibilityChange = () => {
+			if (!document.hidden && sessionId) {
+				const isMobilePath = window.location.pathname.includes("/mobile");
+				const deviceType = isMobilePath ? "mobile" : "desktop";
+				
+				// Only reinitialize if we're not already connected
+				if (connectionStatus !== "connected") {
+					initializeConnection(sessionId, deviceType);
+				}
+			}
+		};
+
+		// Initial setup
+		if (sessionId && connectionStatus !== "connected") {
 			const isMobilePath = window.location.pathname.includes("/mobile");
 			const deviceType = isMobilePath ? "mobile" : "desktop";
 			initializeConnection(sessionId, deviceType);
 		}
 
-		return cleanup;
-	}, [sessionId, initializeConnection, cleanup]);
-
-	// Handle visibility change
-	useEffect(() => {
-		const handleVisibilityChange = () => {
-			if (!document.hidden && sessionId && !eventListenersSet.current) {
-				const isMobilePath = window.location.pathname.includes("/mobile");
-				const deviceType = isMobilePath ? "mobile" : "desktop";
-				initializeConnection(sessionId, deviceType);
-			}
-		};
-
 		document.addEventListener("visibilitychange", handleVisibilityChange);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
+			cleanup();
 		};
-	}, [sessionId, initializeConnection]);
+	}, [sessionId, connectionStatus, initializeConnection, cleanup]);
 
 	const value = {
 		isConnected,

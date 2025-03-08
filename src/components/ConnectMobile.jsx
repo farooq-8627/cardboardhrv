@@ -19,6 +19,8 @@ function ConnectMobile() {
 		deviceInfo,
 		initializeConnection,
 		cleanup,
+		isRecording,
+		handleCameraFrame,
 	} = useAppContext();
 
 	// Initialize connection service when component mounts
@@ -125,7 +127,7 @@ function ConnectMobile() {
 				smallCanvas.height = 120;
 				smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
 				const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.5);
-				connectionService.sendCameraFrame(frameDataUrl);
+				handleCameraFrame({ imageData: frameDataUrl, timestamp: Date.now() });
 			}
 
 			processingRef.current = false;
@@ -136,7 +138,7 @@ function ConnectMobile() {
 			console.error("Error processing frame:", error);
 			processingRef.current = false;
 		}
-	}, []);
+	}, [handleCameraFrame]);
 
 	// Function to start streaming camera data
 	const startStreaming = useCallback(
@@ -240,7 +242,10 @@ function ConnectMobile() {
 								</div>
 							) : (
 								<>
-									<h3>Camera Feed</h3>
+									<h3>
+										Camera Feed{" "}
+										{isRecording ? "(Recording)" : "(Not Recording)"}
+									</h3>
 									<div className="video-container">
 										<video
 											ref={videoRef}
