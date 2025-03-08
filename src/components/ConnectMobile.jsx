@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { AppContextProvider } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 import connectionService from "../utils/connectionService";
 
 function ConnectMobile() {
@@ -15,14 +15,20 @@ function ConnectMobile() {
 	const [isRecording, setIsRecording] = useState(false);
 
 	const {
+		isConnected,
+		heartRateData,
+		currentHeartRate,
+		hrvMetrics,
 		sessionId,
 		connectionStatus,
 		deviceInfo,
+		cameraFrame,
+		lastFrameTime,
+		isRecording: appIsRecording,
 		initializeConnection,
-		cleanup,
 		handleCameraFrame,
-		syncRecordingStatus,
-	} = AppContextProvider.useAppContext();
+		cleanup,
+	} = useAppContext();
 
 	// Initialize connection service when component mounts
 	useEffect(() => {

@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import connectionService from "../utils/connectionService";
-import { AppContextProvider } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 import { Line } from "react-chartjs-2";
 import {
 	Chart as ChartJS,
@@ -44,7 +44,7 @@ function LiveMonitor() {
 		initializeConnection,
 		handleCameraFrame,
 		cleanup,
-	} = AppContextProvider.useAppContext();
+	} = useAppContext();
 
 	// Initialize connection service when component mounts
 	useEffect(() => {
