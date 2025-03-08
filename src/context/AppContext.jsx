@@ -43,14 +43,12 @@ export function AppProvider({ children }) {
 	});
 	const [cameraFrame, setCameraFrame] = useState(null);
 	const [lastFrameTime, setLastFrameTime] = useState(null);
-	const [isRecording, setIsRecording] = useState(() => {
-		return localStorage.getItem("cardboardhrv-was-recording") === "true";
-	});
+	const [isRecording, setIsRecording] = useState(false);
+	const [recordingTimeoutRef] = useRef(null);
 
 	// Refs to prevent duplicate event listeners
 	const eventListenersSet = useRef(false);
 	const initializationInProgress = useRef(false);
-	const recordingTimeoutRef = useRef(null);
 
 	// Memoize event handlers to prevent recreating them on each render
 	const handleConnectionStatusChanged = useCallback((data) => {
@@ -93,52 +91,92 @@ export function AppProvider({ children }) {
 		});
 	}, []);
 
-	const handleCameraFrame = useCallback(
-		(data) => {
-			if (data.imageData) {
-				console.log(
-					"Frame received in context:",
-					new Date(data.timestamp).toLocaleTimeString(),
-					"from device:",
-					data.deviceId
-				);
-
-				// Update frame and recording status immediately
-				setCameraFrame(data.imageData);
-				setLastFrameTime(data.timestamp);
-				setIsRecording(true);
-				localStorage.setItem("cardboardhrv-was-recording", "true");
-
-				// Clear existing timeout
-				if (recordingTimeoutRef.current) {
-					clearTimeout(recordingTimeoutRef.current);
-				}
-
-				// Set new timeout for 5 seconds (increased from 2 to be less aggressive)
-				recordingTimeoutRef.current = setTimeout(() => {
-					const timeSinceLastFrame = Date.now() - data.timestamp;
-					if (timeSinceLastFrame > 5000 && !document.hidden) {
-						console.log(
-							"No frames received for 5 seconds, marking as not recording"
-						);
-						setIsRecording(false);
-						localStorage.setItem("cardboardhrv-was-recording", "false");
-					}
-				}, 5000);
-			} else {
-				console.warn("Received camera frame data without imageData");
-				setIsRecording(false);
-				localStorage.setItem("cardboardhrv-was-recording", "false");
-			}
-		},
-		[lastFrameTime]
-	);
-
-	// Add recording status sync function
+	// Function to sync recording status across components
 	const syncRecordingStatus = useCallback((status) => {
 		setIsRecording(status);
-		localStorage.setItem("cardboardhrv-was-recording", status.toString());
+		if (status) {
+			localStorage.setItem("cardboardhrv-was-recording", "true");
+		} else {
+			localStorage.removeItem("cardboardhrv-was-recording");
+		}
 	}, []);
+
+	// Handle camera frame with improved error handling and status management
+	const handleCameraFrame = useCallback(
+		(frameData) => {
+			if (!frameData) {
+				console.error("No frame data received");
+				return;
+			}
+
+			const { imageData, timestamp, deviceId } = frameData;
+
+			// Log frame receipt with timestamp
+			console.log(
+				`Received frame from ${deviceId} at ${new Date(
+					timestamp
+				).toLocaleTimeString()}`
+			);
+
+			try {
+				// Update frame data
+				if (imageData) {
+					setCameraFrame(imageData);
+					setLastFrameTime(timestamp);
+					syncRecordingStatus(true);
+
+					// Clear any existing timeout
+					if (recordingTimeoutRef.current) {
+						clearTimeout(recordingTimeoutRef.current);
+					}
+
+					// Set new timeout for marking as not recording
+					recordingTimeoutRef.current = setTimeout(() => {
+						const timeSinceLastFrame = Date.now() - lastFrameTime;
+						if (timeSinceLastFrame > 2000) {
+							console.log(
+								"No frames received for 2 seconds, marking as not recording"
+							);
+							syncRecordingStatus(false);
+							setCameraFrame(null);
+						}
+					}, 2000);
+				} else {
+					console.warn("Received frame data without imageData");
+					syncRecordingStatus(false);
+				}
+
+				// Update heart rate data if available
+				if (frameData.heartRate) {
+					setHeartRateData((prev) => [
+						...prev,
+						{
+							timestamp: timestamp,
+							value: frameData.heartRate,
+							ppg: frameData.ppgValue,
+						},
+					]);
+				}
+			} catch (error) {
+				console.error("Error processing camera frame:", error);
+				syncRecordingStatus(false);
+			}
+		},
+		[lastFrameTime, syncRecordingStatus]
+	);
+
+	// Cleanup function with improved resource management
+	const cleanup = useCallback(() => {
+		if (recordingTimeoutRef.current) {
+			clearTimeout(recordingTimeoutRef.current);
+		}
+		syncRecordingStatus(false);
+		setCameraFrame(null);
+		setHeartRateData([]);
+		setLastFrameTime(null);
+		setConnectionStatus("disconnected");
+		setDeviceInfo(null);
+	}, [syncRecordingStatus]);
 
 	// Setup event listeners once
 	const setupEventListeners = useCallback(() => {
@@ -179,23 +217,6 @@ export function AppProvider({ children }) {
 		},
 		[setupEventListeners]
 	);
-
-	// Clean up function
-	const cleanup = useCallback(() => {
-		if (!eventListenersSet.current) return;
-
-		connectionService.off(
-			"connectionStatusChanged",
-			handleConnectionStatusChanged
-		);
-		connectionService.off("devicesPaired", handleDevicesPaired);
-		connectionService.off("heartRateData", handleHeartRateData);
-
-		if (recordingTimeoutRef.current) {
-			clearTimeout(recordingTimeoutRef.current);
-		}
-		eventListenersSet.current = false;
-	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
 
 	// Initial connection setup and visibility change handler
 	useEffect(() => {

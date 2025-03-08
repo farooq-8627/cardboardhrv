@@ -64,8 +64,12 @@ function ConnectMobile() {
 			!videoRef.current ||
 			!videoRef.current.videoWidth ||
 			processingRef.current
-		)
+		) {
+			console.log(
+				"Skipping frame processing - video not ready or already processing"
+			);
 			return;
+		}
 
 		const video = videoRef.current;
 		const canvas = canvasRef.current;
@@ -81,77 +85,169 @@ function ConnectMobile() {
 			// Draw the current video frame
 			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-			// Create frame data
-			const smallCanvas = document.createElement("canvas");
-			const smallCtx = smallCanvas.getContext("2d");
-			smallCanvas.width = 320;
-			smallCanvas.height = 240;
-			smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
-			const frameDataUrl = smallCanvas.toDataURL("image/jpeg", 0.7);
-			const timestamp = Date.now();
+			// Get image data for PPG signal processing
+			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			const data = imageData.data;
 
-			// Send frame through both channels
-			console.log(
-				"Sending camera frame at:",
-				new Date(timestamp).toLocaleTimeString()
-			);
+			// Calculate average red channel value (PPG signal)
+			let redSum = 0;
+			let pixelCount = 0;
+			for (let i = 0; i < data.length; i += 4) {
+				// Only process pixels that are skin-colored (reddish)
+				if (data[i] > data[i + 1] && data[i] > data[i + 2]) {
+					redSum += data[i];
+					pixelCount++;
+				}
+			}
+			const redAvg = pixelCount > 0 ? redSum / pixelCount : 0;
 
-			const frameData = {
-				imageData: frameDataUrl,
-				timestamp: timestamp,
-				deviceId: connectionService.deviceId,
-				type: "cameraFrame",
-				sessionId: sessionId,
-			};
+			// Store PPG values for heart rate calculation
+			const ppgValues = window.ppgValues || [];
+			ppgValues.push({ value: redAvg, timestamp: Date.now() });
 
-			// Send via context first
-			handleCameraFrame(frameData);
+			// Keep last 5 seconds of data (assuming 30fps)
+			const fiveSecondsAgo = Date.now() - 5000;
+			while (ppgValues.length > 0 && ppgValues[0].timestamp < fiveSecondsAgo) {
+				ppgValues.shift();
+			}
+			window.ppgValues = ppgValues;
 
-			// Then send via Firebase
-			connectionService
-				.sendCameraFrame(frameData)
+			// Calculate heart rate from PPG signal using improved peak detection
+			let heartRate = 60;
+			if (ppgValues.length > 30) {
+				const peaks = detectPeaks(ppgValues);
+				const duration =
+					(ppgValues[ppgValues.length - 1].timestamp - ppgValues[0].timestamp) /
+					1000;
+				heartRate = Math.round((peaks * 60) / duration);
+				heartRate = Math.max(40, Math.min(200, heartRate)); // Validate heart rate range
+			}
+
+			// Create optimized frame data for transmission
+			const frameData = createFrameData(video, heartRate, redAvg, sessionId);
+
+			// Send frame data through both channels with proper error handling
+			Promise.all([
+				handleCameraFrame(frameData),
+				connectionService.sendCameraFrame(frameData),
+			])
 				.then(() => {
-					console.log("Frame sent successfully");
+					console.log(
+						"Frame sent successfully:",
+						new Date().toLocaleTimeString()
+					);
 					syncRecordingStatus(true);
+					processingRef.current = false;
+
+					// Schedule next frame only if we're still streaming
+					if (streamRef.current) {
+						frameProcessingRef.current = requestAnimationFrame(processFrame);
+					} else {
+						console.log("Stream ended, stopping frame processing");
+						syncRecordingStatus(false);
+					}
 				})
 				.catch((error) => {
 					console.error("Error sending frame:", error);
 					syncRecordingStatus(false);
+					processingRef.current = false;
+
+					// Attempt to recover by scheduling next frame
+					if (streamRef.current) {
+						frameProcessingRef.current = requestAnimationFrame(processFrame);
+					}
 				});
-
-			processingRef.current = false;
-
-			// Continue processing frames if we have a stream
-			if (streamRef.current) {
-				frameProcessingRef.current = requestAnimationFrame(processFrame);
-			} else {
-				syncRecordingStatus(false);
-			}
 		} catch (error) {
 			console.error("Error processing frame:", error);
 			processingRef.current = false;
 			syncRecordingStatus(false);
+
+			// Attempt to recover
+			if (streamRef.current) {
+				frameProcessingRef.current = requestAnimationFrame(processFrame);
+			}
 		}
 	}, [handleCameraFrame, sessionId, syncRecordingStatus]);
+
+	// Helper function to detect peaks in PPG signal
+	const detectPeaks = (ppgValues) => {
+		let peaks = 0;
+		let isPeak = false;
+		const threshold = calculateDynamicThreshold(ppgValues);
+
+		for (let i = 1; i < ppgValues.length - 1; i++) {
+			const prev = ppgValues[i - 1].value;
+			const curr = ppgValues[i].value;
+			const next = ppgValues[i + 1].value;
+
+			if (curr > prev && curr > next && curr > threshold) {
+				if (!isPeak) {
+					peaks++;
+					isPeak = true;
+				}
+			} else {
+				isPeak = false;
+			}
+		}
+		return peaks;
+	};
+
+	// Helper function to calculate dynamic threshold for peak detection
+	const calculateDynamicThreshold = (ppgValues) => {
+		const values = ppgValues.map((p) => p.value);
+		const mean = values.reduce((a, b) => a + b, 0) / values.length;
+		const stdDev = Math.sqrt(
+			values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length
+		);
+		return mean + stdDev;
+	};
+
+	// Helper function to create optimized frame data
+	const createFrameData = (video, heartRate, ppgValue, sessionId) => {
+		const smallCanvas = document.createElement("canvas");
+		const smallCtx = smallCanvas.getContext("2d");
+		smallCanvas.width = 320;
+		smallCanvas.height = 240;
+		smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
+
+		return {
+			imageData: smallCanvas.toDataURL("image/jpeg", 0.7),
+			timestamp: Date.now(),
+			deviceId: connectionService.deviceId,
+			type: "cameraFrame",
+			sessionId: sessionId,
+			heartRate,
+			ppgValue,
+		};
+	};
 
 	// Function to start streaming camera data
 	const startStreaming = useCallback(
 		(stream) => {
-			if (!stream || !videoRef.current || !canvasRef.current) return;
+			if (!stream || !videoRef.current || !canvasRef.current) {
+				console.error("Missing required references for streaming");
+				return;
+			}
 
 			console.log("Starting camera stream...");
 			const video = videoRef.current;
 			video.srcObject = stream;
 			streamRef.current = stream;
 
+			// Set up video event handlers
 			video.onloadedmetadata = () => {
 				console.log("Video metadata loaded, starting playback...");
-				video.play().catch((error) => {
-					console.error("Error playing video:", error);
-					syncRecordingStatus(false);
-				});
-				processFrame();
-				syncRecordingStatus(true);
+				video
+					.play()
+					.then(() => {
+						console.log("Video playback started successfully");
+						processFrame();
+						syncRecordingStatus(true);
+					})
+					.catch((error) => {
+						console.error("Error playing video:", error);
+						syncRecordingStatus(false);
+					});
 			};
 
 			video.onplay = () => {
@@ -159,13 +255,20 @@ function ConnectMobile() {
 				syncRecordingStatus(true);
 			};
 
-			// Add error handling for video
 			video.onerror = (error) => {
 				console.error("Video error:", error);
 				syncRecordingStatus(false);
+				stopCamera();
+			};
+
+			// Add stream error handling
+			stream.oninactive = () => {
+				console.log("Stream became inactive");
+				syncRecordingStatus(false);
+				stopCamera();
 			};
 		},
-		[processFrame, syncRecordingStatus]
+		[processFrame, syncRecordingStatus, stopCamera]
 	);
 
 	// Function to explicitly request camera permission
