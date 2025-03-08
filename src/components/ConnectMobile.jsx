@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 
 function ConnectMobile() {
@@ -9,6 +9,53 @@ function ConnectMobile() {
 	const [error, setError] = useState("");
 	const [cameraSupported, setCameraSupported] = useState(true);
 	const [cameraPermission, setCameraPermission] = useState(null);
+	const videoRef = useRef(null);
+	const [showCameraTest, setShowCameraTest] = useState(false);
+
+	// Function to explicitly request camera permission
+	const requestCameraPermission = async () => {
+		try {
+			console.log("Explicitly requesting camera permission...");
+			const stream = await navigator.mediaDevices.getUserMedia({
+				video: {
+					facingMode: "user", // Prefer front camera
+					width: { ideal: 1280 },
+					height: { ideal: 720 },
+				},
+			});
+
+			// Show the camera feed briefly to confirm it's working
+			if (videoRef.current) {
+				videoRef.current.srcObject = stream;
+				setShowCameraTest(true);
+
+				// After 3 seconds, hide the camera test
+				setTimeout(() => {
+					setShowCameraTest(false);
+					// Stop all tracks
+					if (stream) {
+						stream.getTracks().forEach((track) => track.stop());
+					}
+					// Set camera permission as granted
+					setCameraPermission("granted");
+					setStatus("connected");
+				}, 3000);
+			}
+
+			return true;
+		} catch (err) {
+			console.error("Camera permission request failed:", err);
+			if (err.name === "NotAllowedError") {
+				setCameraPermission("denied");
+			} else if (err.name === "NotFoundError") {
+				setCameraPermission("notfound");
+			} else {
+				setCameraPermission("error");
+			}
+			setStatus("connected-nocamera");
+			return false;
+		}
+	};
 
 	useEffect(() => {
 		if (!sessionId) {
@@ -28,26 +75,8 @@ function ConnectMobile() {
 				return false;
 			}
 
-			// Then check if we can actually access the camera
-			try {
-				const stream = await navigator.mediaDevices.getUserMedia({
-					video: true,
-				});
-				// Stop the stream immediately, we just wanted to check permission
-				stream.getTracks().forEach((track) => track.stop());
-				setCameraPermission("granted");
-				return true;
-			} catch (err) {
-				console.error("Camera access error:", err);
-				if (err.name === "NotAllowedError") {
-					setCameraPermission("denied");
-				} else if (err.name === "NotFoundError") {
-					setCameraPermission("notfound");
-				} else {
-					setCameraPermission("error");
-				}
-				return false;
-			}
+			// We'll check for permission in the connect flow
+			return true;
 		};
 
 		// In a real implementation, this would connect to your backend
@@ -55,18 +84,14 @@ function ConnectMobile() {
 		const connectToBackend = async () => {
 			try {
 				// Simulate connection process
-				await new Promise((resolve) => setTimeout(resolve, 2000));
+				await new Promise((resolve) => setTimeout(resolve, 1000));
 
-				// Check camera support and access
-				const hasCameraAccess = await checkCameraSupport();
+				// Check camera support
+				const isCameraSupported = await checkCameraSupport();
 
-				if (hasCameraAccess) {
-					setStatus("connected");
-
-					// In a real implementation, you would:
-					// 1. Establish a WebSocket connection to the main app
-					// 2. Start capturing PPG signals from the camera
-					// 3. Process the signals and send heart rate data
+				if (isCameraSupported) {
+					// Set status to request-camera to show the camera permission button
+					setStatus("request-camera");
 				} else {
 					// We'll still allow connection, but with a warning
 					setStatus("connected-nocamera");
@@ -93,15 +118,7 @@ function ConnectMobile() {
 	};
 
 	const handleRequestCameraPermission = async () => {
-		try {
-			await navigator.mediaDevices.getUserMedia({ video: true });
-			window.location.reload();
-		} catch (err) {
-			console.error("Failed to get camera permission:", err);
-			setError(
-				"Camera permission was denied. Please enable camera access in your browser settings and try again."
-			);
-		}
+		await requestCameraPermission();
 	};
 
 	return (
@@ -121,6 +138,63 @@ function ConnectMobile() {
 						<div className="spinner"></div>
 						<p>Connecting to CardboardHRV application...</p>
 						<p className="session-id">Session ID: {sessionId}</p>
+					</div>
+				)}
+
+				{status === "request-camera" && (
+					<div className="status camera-request">
+						<h2>Connection Successful!</h2>
+						<p>To monitor your heart rate, we need access to your camera.</p>
+						<p>
+							Please tap the button below and allow camera access when prompted.
+						</p>
+
+						<div className="camera-permission-info">
+							<p>
+								<strong>Why we need camera access:</strong>
+							</p>
+							<p>
+								The camera is used to detect subtle color changes in your skin
+								that indicate your heartbeat (PPG signal).
+							</p>
+							<p>
+								Your camera feed is processed locally and is not stored or
+								transmitted.
+							</p>
+						</div>
+
+						<button
+							className="primary-button camera-button"
+							onClick={handleRequestCameraPermission}
+						>
+							Allow Camera Access
+						</button>
+
+						<p className="skip-note">
+							<small>
+								If you prefer not to grant camera access, you can{" "}
+								<button
+									className="text-button"
+									onClick={() => setStatus("connected-nocamera")}
+								>
+									skip this step
+								</button>
+								, but heart rate monitoring will not be available.
+							</small>
+						</p>
+					</div>
+				)}
+
+				{showCameraTest && (
+					<div className="camera-test-container">
+						<p>Camera test in progress...</p>
+						<video
+							ref={videoRef}
+							autoPlay
+							playsInline
+							muted
+							className="camera-test-video"
+						/>
 					</div>
 				)}
 
@@ -160,12 +234,20 @@ function ConnectMobile() {
 									Heart rate monitoring requires camera access to capture the
 									PPG signal.
 								</p>
-								<p>Please enable camera access in your browser settings.</p>
+								<p>
+									<strong>To enable camera access in Chrome:</strong>
+								</p>
+								<ol className="browser-instructions">
+									<li>Tap the lock/info icon in the address bar</li>
+									<li>Select "Site settings"</li>
+									<li>Find "Camera" and change it to "Allow"</li>
+									<li>Refresh this page</li>
+								</ol>
 								<button
 									className="primary-button"
 									onClick={handleRequestCameraPermission}
 								>
-									Request Camera Permission
+									Try Again
 								</button>
 							</div>
 						)}

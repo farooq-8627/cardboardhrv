@@ -845,3 +845,61 @@ ul {
 .camera-requirements li {
 	margin-bottom: 0.5rem;
 }
+
+.camera-request {
+	text-align: center;
+}
+
+.camera-button {
+	margin: 1.5rem 0;
+	padding: 1rem 2rem;
+	font-size: 1.1rem;
+	background-color: var(--success-color);
+}
+
+.skip-note {
+	margin-top: 1rem;
+	color: var(--secondary-color);
+}
+
+.text-button {
+	background: none;
+	border: none;
+	color: var(--primary-color);
+	text-decoration: underline;
+	cursor: pointer;
+	padding: 0;
+	font: inherit;
+}
+
+.camera-test-container {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.9);
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	color: white;
+}
+
+.camera-test-video {
+	max-width: 100%;
+	max-height: 70vh;
+	border: 2px solid white;
+	border-radius: 8px;
+}
+
+.browser-instructions {
+	text-align: left;
+	margin: 1rem 0;
+	padding-left: 1.5rem;
+}
+
+.browser-instructions li {
+	margin-bottom: 0.5rem;
+}
