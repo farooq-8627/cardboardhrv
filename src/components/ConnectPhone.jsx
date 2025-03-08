@@ -1,288 +1,218 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import QRCode from "react-qr-code";
+import { Link } from "react-router-dom";
+import QRCode from "qrcode.react";
+import connectionService from "../utils/connectionService";
 
-function ConnectPhone({
-	isConnected,
-	onConnect,
-	sessionId,
-	connectedSessionId,
-	debugConnectionStatus,
-}) {
-	const [activeTab, setActiveTab] = useState("qrcode");
-	const [manualCode, setManualCode] = useState("");
-	const [error, setError] = useState("");
-	const navigate = useNavigate();
+function ConnectPhone() {
+	const [sessionId, setSessionId] = useState("");
 	const [qrValue, setQrValue] = useState("");
-	const [localIp, setLocalIp] = useState("");
-	const qrValueRef = useRef(null);
+	const [connectionStatus, setConnectionStatus] = useState("disconnected");
+	const [connectionInfo, setConnectionInfo] = useState("");
+	const [deviceInfo, setDeviceInfo] = useState(null);
+	const [showInstructions, setShowInstructions] = useState(true);
 
+	// Initialize connection service when component mounts
 	useEffect(() => {
-		// Generate the QR code URL only once when the component mounts
-		if (!qrValueRef.current && sessionId) {
-			// Get the current hostname/IP
-			const hostname = window.location.hostname;
-			const port = window.location.port;
-			const protocol = window.location.protocol;
+		// Get the session ID from localStorage or generate a new one
+		const storedSessionId = localStorage.getItem("cardboardhrv-session-id");
+		const newSessionId = storedSessionId || generateSessionId();
 
-			// Create the URL for the mobile connection
-			const baseUrl = `${protocol}//${hostname}${port ? ":" + port : ""}`;
-			const mobileUrl = `${baseUrl}/mobile?session=${sessionId}`;
+		setSessionId(newSessionId);
 
-			console.log("Generated QR code URL with session ID:", sessionId);
-			setQrValue(mobileUrl);
-			qrValueRef.current = mobileUrl;
-			setLocalIp(hostname);
-
-			// Store the QR value in sessionStorage to keep it consistent across tab changes
-			try {
-				sessionStorage.setItem("cardboardhrv-qr-value", mobileUrl);
-			} catch (e) {
-				console.error("Failed to store QR value in sessionStorage:", e);
-			}
-		} else if (!qrValueRef.current) {
-			// Try to retrieve from sessionStorage if not set yet
-			try {
-				const storedQrValue = sessionStorage.getItem("cardboardhrv-qr-value");
-				if (storedQrValue) {
-					console.log("Retrieved QR code URL from sessionStorage");
-					setQrValue(storedQrValue);
-					qrValueRef.current = storedQrValue;
-
-					// Extract hostname from the stored URL
-					const url = new URL(storedQrValue);
-					setLocalIp(url.hostname);
-				}
-			} catch (e) {
-				console.error("Failed to retrieve QR value from sessionStorage:", e);
-			}
+		// Store the session ID in localStorage
+		if (!storedSessionId) {
+			localStorage.setItem("cardboardhrv-session-id", newSessionId);
 		}
 
-		// If already connected, redirect to monitor
-		if (isConnected) {
-			navigate("/monitor");
-		}
-	}, [isConnected, navigate, sessionId]);
+		// Generate QR code value
+		const baseUrl = window.location.origin;
+		const mobileUrl = `${baseUrl}/mobile?session=${newSessionId}`;
+		setQrValue(mobileUrl);
 
-	const handleTabChange = (tab) => {
-		setActiveTab(tab);
-		setError("");
+		// Initialize connection service
+		const initializeConnection = async () => {
+			const success = await connectionService.initialize(
+				newSessionId,
+				"desktop"
+			);
+			if (success) {
+				console.log(
+					`Initialized connection service for session ${newSessionId}`
+				);
+
+				// Set up event listeners
+				connectionService.on(
+					"connectionStatusChanged",
+					handleConnectionStatusChanged
+				);
+				connectionService.on("devicesPaired", handleDevicesPaired);
+				connectionService.on("message", handleMessage);
+			} else {
+				console.error("Failed to initialize connection service");
+				setConnectionInfo(
+					"Failed to initialize connection service. Please try refreshing the page."
+				);
+			}
+		};
+
+		initializeConnection();
+
+		// Clean up event listeners
+		return () => {
+			connectionService.off(
+				"connectionStatusChanged",
+				handleConnectionStatusChanged
+			);
+			connectionService.off("devicesPaired", handleDevicesPaired);
+			connectionService.off("message", handleMessage);
+
+			// Don't disconnect from the session here, as we want to keep it active
+			// when navigating to the monitor page
+		};
+	}, []);
+
+	// Generate a random session ID
+	const generateSessionId = () => {
+		return Math.random().toString(36).substring(2, 10);
 	};
 
-	const handleManualConnect = (e) => {
-		e.preventDefault();
-		if (!manualCode.trim()) {
-			setError("Please enter a valid connection code");
-			return;
-		}
+	// Handle connection status changes
+	const handleConnectionStatusChanged = (data) => {
+		console.log("Connection status changed:", data.status);
+		setConnectionStatus(data.status);
+		setConnectionInfo(`Connection status: ${data.status}`);
 
-		// In a real implementation, this would validate the code
-		// For this demo, we'll just simulate a connection
-		onConnect(manualCode);
+		// If connected, hide instructions
+		if (data.status === "connected") {
+			setShowInstructions(false);
+		}
+	};
+
+	// Handle devices paired event
+	const handleDevicesPaired = (data) => {
+		console.log("Devices paired:", data);
+		setDeviceInfo(data);
+		setConnectionInfo(`Connected to mobile device: ${data.mobileDeviceId}`);
+		setShowInstructions(false);
+	};
+
+	// Handle message event
+	const handleMessage = (data) => {
+		console.log("Message received:", data);
+		setConnectionInfo(`Message from mobile: ${data.text}`);
+	};
+
+	// Go to monitor page
+	const goToMonitor = () => {
+		window.location.href = `/monitor?sessionId=${sessionId}`;
 	};
 
 	return (
 		<div className="connect-phone">
 			<div className="section-title">
-				<h2>Connect Your Phone</h2>
+				<h1>Connect Your Phone</h1>
 			</div>
 
-			{isConnected ? (
-				<div className="connection-status connected card">
-					<div className="success-icon">✓</div>
-					<h3>Phone Connected!</h3>
-					<p>
-						Your phone is now connected and sending data to the application.
-					</p>
-					<p>
-						Session ID: <strong>{connectedSessionId}</strong>
-					</p>
-					<p>You can now go to the Live Monitor to see your heart rate data.</p>
-					<button
-						className="primary-button"
-						onClick={() => navigate("/monitor")}
-					>
-						Go to Live Monitor
-					</button>
-				</div>
-			) : (
-				<div className="connection-status card">
-					<p>
-						To monitor your heart rate, connect your smartphone to this
-						application.
-					</p>
+			<div className="connection-container">
+				<div className="qr-section card">
+					<h2>Scan QR Code</h2>
+					<p>Scan this QR code with your phone's camera to connect.</p>
 
-					<div className="method-tabs">
-						<button
-							className={activeTab === "qrcode" ? "active" : ""}
-							onClick={() => handleTabChange("qrcode")}
-						>
-							<span className="tab-icon">📱</span> QR Code
-						</button>
-						<button
-							className={activeTab === "manual" ? "active" : ""}
-							onClick={() => handleTabChange("manual")}
-						>
-							<span className="tab-icon">🔢</span> Manual Code
-						</button>
-						<button
-							className={activeTab === "local" ? "active" : ""}
-							onClick={() => handleTabChange("local")}
-						>
-							<span className="tab-icon">🌐</span> Local Network
-						</button>
+					<div className="qr-code-container">
+						<QRCode
+							value={qrValue}
+							size={200}
+							level="H"
+							includeMargin={true}
+							renderAs="svg"
+						/>
 					</div>
 
-					<div className="method-content">
-						{activeTab === "qrcode" && (
-							<div className="qrcode-method">
-								<div className="qrcode-container">
-									{qrValue ? (
-										<QRCode value={qrValue} size={200} />
-									) : (
-										<div className="mock-qrcode">
-											<div className="qr-placeholder"></div>
-											<p>Generating QR code...</p>
-										</div>
-									)}
-									{qrValue && (
-										<p className="qr-url">
-											<a
-												href={qrValue}
-												target="_blank"
-												rel="noopener noreferrer"
-											>
-												{qrValue}
-											</a>
-										</p>
-									)}
-								</div>
-
-								<div className="instructions">
-									<h4>How to Connect:</h4>
-									<ol>
-										<li>Open your smartphone's camera app</li>
-										<li>Scan the QR code above</li>
-										<li>Tap the link that appears</li>
-										<li>Follow the instructions on your phone</li>
-									</ol>
-								</div>
-							</div>
-						)}
-
-						{activeTab === "manual" && (
-							<div className="manual-method">
-								<form onSubmit={handleManualConnect}>
-									<div className="input-group">
-										<label htmlFor="connection-code">Connection Code:</label>
-										<input
-											type="text"
-											id="connection-code"
-											value={manualCode}
-											onChange={(e) => setManualCode(e.target.value)}
-											placeholder="Enter the 8-digit code"
-										/>
-										<button type="submit">Connect</button>
-									</div>
-									{error && <p className="error-message">{error}</p>}
-								</form>
-
-								<div className="instructions">
-									<h4>How to Find Your Code:</h4>
-									<ol>
-										<li>
-											Open <strong>{window.location.origin}/mobile</strong> on
-											your smartphone
-										</li>
-										<li>
-											Enter the session ID: <strong>{sessionId}</strong>
-										</li>
-										<li>Follow the instructions on your phone</li>
-									</ol>
-								</div>
-							</div>
-						)}
-
-						{activeTab === "local" && (
-							<div className="local-connection">
-								<p>
-									If you're on the same WiFi network, you can connect directly
-									using this link:
-								</p>
-								<p className="qr-url">
-									<a href={qrValue} target="_blank" rel="noopener noreferrer">
-										{qrValue}
-									</a>
-								</p>
-
-								<div className="connection-note card">
-									<p>
-										<span className="warning-icon">⚠️</span> Make sure both
-										devices are connected to the same WiFi network.
-									</p>
-								</div>
-
-								<div className="instructions">
-									<h4>Session Information:</h4>
-									<ul>
-										<li>
-											<strong>Session ID:</strong> {sessionId}
-										</li>
-										<li>
-											<strong>Local IP:</strong> {localIp}
-										</li>
-									</ul>
-								</div>
-							</div>
-						)}
+					<div className="session-id-display">
+						<p>
+							Session ID: <strong>{sessionId}</strong>
+						</p>
 					</div>
 
-					<div
-						className="debug-section"
-						style={{
-							marginTop: "1rem",
-							padding: "1rem",
-							backgroundColor: "#f0f0f0",
-							borderRadius: "4px",
-							fontSize: "0.8rem",
-						}}
-					>
-						<h4>Debug Information</h4>
-						<p>Session ID: {sessionId}</p>
-						<p>Connected: {isConnected ? "Yes" : "No"}</p>
-						<p>Connected Session ID: {connectedSessionId || "None"}</p>
-						<button
-							onClick={debugConnectionStatus}
-							style={{
-								padding: "0.5rem",
-								marginTop: "0.5rem",
-								backgroundColor: "#007bff",
-								color: "white",
-								border: "none",
-								borderRadius: "4px",
-							}}
-						>
-							Debug Connection
+					<div className="manual-connection">
+						<h3>Manual Connection</h3>
+						<p>Or open this URL on your phone:</p>
+						<div className="url-display">
+							<code>{qrValue}</code>
+						</div>
+					</div>
+				</div>
+
+				<div className="connection-status-section card">
+					<h2>Connection Status</h2>
+
+					<div className={`status-indicator ${connectionStatus}`}>
+						<div className="status-dot"></div>
+						<span className="status-text">
+							{connectionStatus === "connected"
+								? "Connected"
+								: connectionStatus === "connecting"
+								? "Connecting..."
+								: connectionStatus === "disconnected"
+								? "Disconnected"
+								: "Unknown"}
+						</span>
+					</div>
+
+					<p className="connection-info">{connectionInfo}</p>
+
+					{deviceInfo && (
+						<div className="device-info">
+							<h3>Connected Device</h3>
+							<p>
+								<strong>Device ID:</strong> {deviceInfo.mobileDeviceId}
+							</p>
+							<p>
+								<strong>Connected at:</strong>{" "}
+								{new Date(deviceInfo.timestamp).toLocaleTimeString()}
+							</p>
+						</div>
+					)}
+
+					{connectionStatus === "connected" && (
+						<div className="monitor-button-container">
+							<button className="primary-button" onClick={goToMonitor}>
+								Go to Monitor
+							</button>
+						</div>
+					)}
+				</div>
+
+				{showInstructions && (
+					<div className="instructions card">
+						<h2>Connection Instructions</h2>
+						<ol>
+							<li>Scan the QR code with your phone's camera</li>
+							<li>Open the link that appears</li>
+							<li>Allow camera access when prompted</li>
+							<li>Keep the phone page open while monitoring</li>
+						</ol>
+						<div className="note">
+							<p>
+								<strong>Note:</strong> Both devices must be connected to the
+								internet. For best results, use the same WiFi network.
+							</p>
+						</div>
+					</div>
+				)}
+
+				{connectionStatus === "connected" && (
+					<div className="next-steps card">
+						<h2>Connection Successful!</h2>
+						<p>
+							Your phone is now connected and ready to monitor your heart rate.
+						</p>
+						<p>Click the button below to go to the monitoring page.</p>
+						<button className="primary-button" onClick={goToMonitor}>
+							Start Monitoring
 						</button>
 					</div>
-				</div>
-			)}
-
-			<div className="camera-permission-info card">
-				<h3>Camera Requirements</h3>
-				<div className="camera-requirements">
-					<h4>For best results:</h4>
-					<ul>
-						<li>Use a smartphone with a good quality camera</li>
-						<li>Ensure good lighting conditions</li>
-						<li>
-							Place your fingertip gently over the camera lens when prompted
-						</li>
-						<li>
-							Keep your finger still during measurement for accurate readings
-						</li>
-					</ul>
-				</div>
+				)}
 			</div>
 		</div>
 	);

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import connectionService from "../utils/connectionService";
 
 function ConnectMobile() {
 	const [searchParams] = useSearchParams();
@@ -16,49 +17,97 @@ function ConnectMobile() {
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [heartRate, setHeartRate] = useState(0);
 	const [connectionInfo, setConnectionInfo] = useState("");
-	const wsRef = useRef(null);
-	const [manualSessionId, setManualSessionId] = useState("");
 	const [browserInfo, setBrowserInfo] = useState("");
-	const connectionAttempted = useRef(false);
-	const [isSecureContext, setIsSecureContext] = useState(true);
-	const [isInIframe, setIsInIframe] = useState(false);
+	const [connectionStatus, setConnectionStatus] = useState("disconnected");
+	const [deviceInfo, setDeviceInfo] = useState(null);
+	const processingRef = useRef(false);
 
-	// Store the session ID in localStorage to keep it consistent
+	// Initialize connection service when component mounts
 	useEffect(() => {
-		if (sessionId) {
-			try {
-				// Store the session ID in localStorage
-				localStorage.setItem("cardboardhrv-mobile-session-id", sessionId);
-				console.log("Stored session ID in localStorage:", sessionId);
-			} catch (e) {
-				console.error("Failed to store session ID in localStorage:", e);
-			}
-		} else {
-			// Try to retrieve from localStorage if not in URL
-			try {
-				const storedSessionId = localStorage.getItem(
-					"cardboardhrv-mobile-session-id"
-				);
-				if (storedSessionId) {
-					console.log(
-						"Retrieved session ID from localStorage:",
-						storedSessionId
-					);
-					// Navigate to the same page but with the session ID in the URL
-					navigate(`/mobile?session=${storedSessionId}`, { replace: true });
-				}
-			} catch (e) {
-				console.error("Failed to retrieve session ID from localStorage:", e);
-			}
+		if (!sessionId) {
+			setStatus("no-session");
+			return;
 		}
+
+		setStatus("connecting");
+
+		// Initialize connection service
+		const initializeConnection = async () => {
+			// Initialize connection service
+			const success = await connectionService.initialize(sessionId, "mobile");
+			if (success) {
+				console.log(`Initialized connection service for session ${sessionId}`);
+
+				// Set up event listeners
+				connectionService.on(
+					"connectionStatusChanged",
+					handleConnectionStatusChanged
+				);
+				connectionService.on("devicesPaired", handleDevicesPaired);
+				connectionService.on("message", handleMessage);
+
+				// Check if camera is supported
+				checkCameraSupport();
+			} else {
+				console.error("Failed to initialize connection service");
+				setStatus("error");
+				setError("Failed to connect to the application. Please try again.");
+			}
+		};
+
+		initializeConnection();
+
+		// Clean up event listeners
+		return () => {
+			// Stop camera stream if active
+			if (cameraStream) {
+				cameraStream.getTracks().forEach((track) => track.stop());
+			}
+
+			// Clean up connection service
+			connectionService.off(
+				"connectionStatusChanged",
+				handleConnectionStatusChanged
+			);
+			connectionService.off("devicesPaired", handleDevicesPaired);
+			connectionService.off("message", handleMessage);
+
+			// Disconnect from the session
+			connectionService.disconnect();
+		};
 	}, [sessionId, navigate]);
 
-	// Check for secure context and iframe on mount
-	useEffect(() => {
+	// Handle connection status changes
+	const handleConnectionStatusChanged = (data) => {
+		console.log("Connection status changed:", data.status);
+		setConnectionStatus(data.status);
+		setConnectionInfo(`Connection status: ${data.status}`);
+	};
+
+	// Handle devices paired event
+	const handleDevicesPaired = (data) => {
+		console.log("Devices paired:", data);
+		setDeviceInfo(data);
+		setConnectionInfo("Connected to desktop device!");
+	};
+
+	// Handle message event
+	const handleMessage = (data) => {
+		console.log("Message received:", data);
+		setConnectionInfo(`Message from desktop: ${data.text}`);
+	};
+
+	// Check if camera is supported
+	const checkCameraSupport = () => {
 		// Check if we're in a secure context (required for camera access in modern browsers)
 		if (typeof window !== "undefined" && !window.isSecureContext) {
 			console.error("Not in a secure context - camera access requires HTTPS");
-			setIsSecureContext(false);
+			setCameraSupported(false);
+			setBrowserInfo(
+				`Not in a secure context. User agent: ${navigator.userAgent}`
+			);
+			setStatus("request-camera");
+			return false;
 		}
 
 		// Check if we're in an iframe which might restrict permissions
@@ -67,32 +116,32 @@ function ConnectMobile() {
 				console.warn(
 					"App is running in an iframe - camera permissions may be restricted"
 				);
-				setIsInIframe(true);
+				setBrowserInfo(`Running in iframe. User agent: ${navigator.userAgent}`);
 			}
 		} catch (e) {
 			// If we can't access window.self or window.top, we're likely in an iframe
 			console.warn(
 				"Unable to determine if in iframe - assuming restricted context"
 			);
-			setIsInIframe(true);
+			setBrowserInfo(
+				`Unable to determine iframe status. User agent: ${navigator.userAgent}`
+			);
 		}
 
-		// More thorough check for camera support
-		const checkCameraSupport = () => {
-			return !!(
-				navigator.mediaDevices &&
-				navigator.mediaDevices.getUserMedia &&
-				window.MediaStream
+		// Check if the browser supports getUserMedia
+		if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+			setCameraSupported(true);
+			setStatus("request-camera");
+			return true;
+		} else {
+			setCameraSupported(false);
+			setBrowserInfo(
+				`Browser doesn't support getUserMedia. User agent: ${navigator.userAgent}`
 			);
-		};
-
-		setCameraSupported(checkCameraSupport());
-		setBrowserInfo(
-			`Browser: ${navigator.userAgent}, Secure Context: ${
-				window.isSecureContext
-			}, Camera API Support: ${checkCameraSupport()}`
-		);
-	}, []);
+			setStatus("request-camera");
+			return false;
+		}
+	};
 
 	// Function to explicitly request camera permission with a direct user interaction
 	const requestCameraPermission = async () => {
@@ -129,9 +178,6 @@ function ConnectMobile() {
 				}, 3000);
 			}
 
-			// Add this at the end of the try block in requestCameraPermission, right after startStreaming(stream):
-			forceConnectionNotification();
-
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
@@ -150,155 +196,7 @@ function ConnectMobile() {
 			}
 			setStatus("connected-nocamera");
 
-			// Even if camera access fails, we should still notify the main app that we're connected
-			notifyMainAppConnected();
-
 			return false;
-		}
-	};
-
-	// Function to notify the main app that we're connected
-	const notifyMainAppConnected = () => {
-		if (connectionAttempted.current) return; // Prevent duplicate notifications
-
-		console.log("Notifying main app of connection");
-		window.dispatchEvent(
-			new CustomEvent("cardboardhrv-mobile-connect", {
-				detail: {
-					sessionId: sessionId || manualSessionId,
-					timestamp: new Date().toISOString(),
-				},
-			})
-		);
-
-		connectionAttempted.current = true;
-
-		// Also send a direct message
-		window.dispatchEvent(
-			new CustomEvent("cardboardhrv-mobile-message", {
-				detail: {
-					data: JSON.stringify({
-						type: "connectionStatus",
-						sessionId: sessionId || manualSessionId,
-						status: "connected",
-						message: "Mobile device connected",
-						timestamp: new Date().toISOString(),
-					}),
-				},
-			})
-		);
-	};
-
-	// Function to force connection notification with a direct approach
-	const forceConnectionNotification = () => {
-		console.log("Forcing connection notification");
-
-		// Try multiple approaches to notify the main app
-
-		// 1. Using localStorage as a fallback communication method
-		try {
-			localStorage.setItem(
-				"cardboardhrv-connection",
-				JSON.stringify({
-					sessionId: sessionId || manualSessionId,
-					timestamp: new Date().toISOString(),
-					connected: true,
-				})
-			);
-			console.log("Set connection data in localStorage");
-		} catch (e) {
-			console.error("Failed to use localStorage:", e);
-		}
-
-		// 2. Try to use BroadcastChannel API if available
-		try {
-			if (typeof BroadcastChannel !== "undefined") {
-				const bc = new BroadcastChannel("cardboardhrv-channel");
-				bc.postMessage({
-					type: "connection",
-					sessionId: sessionId || manualSessionId,
-					timestamp: new Date().toISOString(),
-				});
-				console.log("Sent message via BroadcastChannel");
-			}
-		} catch (e) {
-			console.error("Failed to use BroadcastChannel:", e);
-		}
-
-		// 3. Still use the custom events as before
-		window.dispatchEvent(
-			new CustomEvent("cardboardhrv-mobile-connect", {
-				detail: {
-					sessionId: sessionId || manualSessionId,
-					timestamp: new Date().toISOString(),
-					forced: true,
-				},
-			})
-		);
-
-		// 4. Try to use window.opener if available (for when opened via QR code)
-		try {
-			if (window.opener && !window.opener.closed) {
-				window.opener.postMessage(
-					{
-						type: "cardboardhrv-connection",
-						sessionId: sessionId || manualSessionId,
-						timestamp: new Date().toISOString(),
-					},
-					"*"
-				);
-				console.log("Sent message to opener window");
-			}
-		} catch (e) {
-			console.error("Failed to use window.opener:", e);
-		}
-
-		// Set a flag in the component to show we've attempted connection
-		connectionAttempted.current = true;
-
-		// Update UI to show connection was attempted
-		setConnectionInfo(
-			"Connection notification sent. Please check your computer screen."
-		);
-	};
-
-	// Function to directly redirect to the monitor page with connection parameters
-	const redirectToMonitor = () => {
-		try {
-			// Create a URL to the monitor page with connection parameters
-			const baseUrl = window.location.origin;
-			let finalSessionId = sessionId || manualSessionId;
-			// Try to get from localStorage if not available
-			if (!finalSessionId) {
-				try {
-					const storedSessionId = localStorage.getItem(
-						"cardboardhrv-mobile-session-id"
-					);
-					if (storedSessionId) {
-						finalSessionId = storedSessionId;
-					}
-				} catch (e) {
-					console.error("Failed to retrieve session ID from localStorage:", e);
-				}
-			}
-			const monitorUrl = `${baseUrl}/monitor?directConnect=true&sessionId=${finalSessionId}&timestamp=${Date.now()}`;
-
-			// Open the monitor URL in a new tab/window
-			window.open(monitorUrl, "_blank");
-
-			// Also try to navigate the parent window if possible
-			if (window.opener && !window.opener.closed) {
-				window.opener.location.href = monitorUrl;
-			}
-
-			setConnectionInfo(
-				"Redirected to monitor page. Please check your computer browser."
-			);
-		} catch (e) {
-			console.error("Error redirecting to monitor:", e);
-			setConnectionInfo(
-				"Failed to redirect. Please manually go to the monitor page on your computer."
-			);
 		}
 	};
 
@@ -313,99 +211,68 @@ function ConnectMobile() {
 		const ctx = canvas.getContext("2d", { willReadFrequently: true });
 		const video = videoRef.current;
 
-		// Notify the main app that we're connected with camera
-		notifyMainAppConnected();
-
 		try {
-			// For our simulation, we'll use a custom event system instead of actual WebSockets
-			// This is because browsers don't allow WebSocket connections to non-WebSocket servers
-			console.log("Setting up connection to main app");
-
-			// Create a simulated WebSocket
-			const simulatedWs = {
-				readyState: 1, // WebSocket.OPEN
-				send: function (data) {
-					// Dispatch a custom event that the main app can listen for
-					console.log("Sending data to main app:", data);
-					window.dispatchEvent(
-						new CustomEvent("cardboardhrv-mobile-message", {
-							detail: { data },
-						})
-					);
-				},
-				close: function () {
-					console.log("Closing connection to main app");
-					window.dispatchEvent(
-						new CustomEvent("cardboardhrv-mobile-close", {
-							detail: { sessionId: sessionId || manualSessionId },
-						})
-					);
-					this.readyState = 3; // WebSocket.CLOSED
-				},
-			};
-
-			wsRef.current = simulatedWs;
-
-			// Send initialization message
-			simulatedWs.send(
-				JSON.stringify({
-					type: "init",
-					sessionId: sessionId || manualSessionId,
-				})
-			);
-
-			setConnectionInfo("Connected to main application");
+			console.log("Setting up camera processing");
 
 			// Set up a function to process video frames and extract heart rate
 			const processFrame = () => {
-				if (!isStreaming || !video || !video.videoWidth) return;
+				if (
+					!isStreaming ||
+					!video ||
+					!video.videoWidth ||
+					processingRef.current
+				)
+					return;
 
-				// Set canvas dimensions to match video
-				canvas.width = video.videoWidth;
-				canvas.height = video.videoHeight;
+				processingRef.current = true;
 
-				// Draw the current video frame to the canvas
-				ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+				try {
+					// Set canvas dimensions to match video
+					canvas.width = video.videoWidth;
+					canvas.height = video.videoHeight;
 
-				// Get the image data from the canvas
-				const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+					// Draw the current video frame to the canvas
+					ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-				// Simple PPG signal extraction (red channel average)
-				let redSum = 0;
-				const data = imageData.data;
+					// Get the image data from the canvas
+					const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-				// Sample only a portion of the image for performance
-				const sampleSize = 50;
-				const centerX = Math.floor(canvas.width / 2);
-				const centerY = Math.floor(canvas.height / 2);
-				const startX = centerX - sampleSize / 2;
-				const startY = centerY - sampleSize / 2;
+					// Simple PPG signal extraction (red channel average)
+					let redSum = 0;
+					const data = imageData.data;
 
-				for (let y = startY; y < startY + sampleSize; y++) {
-					for (let x = startX; x < startX + sampleSize; x++) {
-						const index = (y * canvas.width + x) * 4;
-						redSum += data[index]; // Red channel
+					// Sample only a portion of the image for performance
+					const sampleSize = 50;
+					const centerX = Math.floor(canvas.width / 2);
+					const centerY = Math.floor(canvas.height / 2);
+					const startX = centerX - sampleSize / 2;
+					const startY = centerY - sampleSize / 2;
+
+					for (let y = startY; y < startY + sampleSize; y++) {
+						for (let x = startX; x < startX + sampleSize; x++) {
+							const index = (y * canvas.width + x) * 4;
+							redSum += data[index]; // Red channel
+						}
 					}
-				}
 
-				const redAvg = redSum / (sampleSize * sampleSize);
+					const redAvg = redSum / (sampleSize * sampleSize);
 
-				// Simulate heart rate calculation (in a real app, this would use a more sophisticated algorithm)
-				// For demo purposes, we'll use a simple simulation
-				const simulatedHeartRate = Math.floor(60 + Math.random() * 30);
-				setHeartRate(simulatedHeartRate);
+					// Simulate heart rate calculation (in a real app, this would use a more sophisticated algorithm)
+					// For demo purposes, we'll use a simple simulation
+					const simulatedHeartRate = Math.floor(60 + Math.random() * 30);
+					setHeartRate(simulatedHeartRate);
 
-				// Send the data to the main application
-				if (wsRef.current && wsRef.current.readyState === 1) {
-					wsRef.current.send(
-						JSON.stringify({
-							type: "heartRateData",
-							sessionId: sessionId || manualSessionId,
-							heartRate: simulatedHeartRate,
-							timestamp: new Date().toISOString(),
-							rawData: redAvg,
-						})
-					);
+					// Send the data to the connection service
+					connectionService.sendHeartRateData({
+						heartRate: simulatedHeartRate,
+						timestamp: Date.now(),
+						rawData: redAvg,
+					});
+
+					processingRef.current = false;
+				} catch (error) {
+					console.error("Error processing frame:", error);
+					processingRef.current = false;
 				}
 
 				// Continue processing frames
@@ -419,93 +286,22 @@ function ConnectMobile() {
 
 			// Set up a ping to keep the connection alive
 			const pingInterval = setInterval(() => {
-				if (wsRef.current && wsRef.current.readyState === 1) {
-					wsRef.current.send(
-						JSON.stringify({
-							type: "ping",
-							sessionId: sessionId || manualSessionId,
-							timestamp: new Date().toISOString(),
-						})
-					);
-				} else {
-					clearInterval(pingInterval);
-				}
+				connectionService.sendMessage("Ping from mobile device");
 			}, 5000);
 
-			// Clean up the interval when the component unmounts
-			return () => clearInterval(pingInterval);
+			// Store the interval ID for cleanup
+			window.cardboardHrvPingInterval = pingInterval;
+
+			// Return a cleanup function
+			return () => {
+				clearInterval(pingInterval);
+				window.cardboardHrvPingInterval = null;
+			};
 		} catch (error) {
-			console.error("Error setting up connection:", error);
-			setConnectionInfo("Failed to connect to main application");
+			console.error("Error setting up camera processing:", error);
+			setConnectionInfo("Failed to process camera feed");
 		}
 	};
-
-	// Clean up camera stream and WebSocket when component unmounts
-	useEffect(() => {
-		// Set up event listener for the main app's response
-		const handleMainAppResponse = (event) => {
-			const data = JSON.parse(event.detail.data);
-			console.log("Received response from main app:", data);
-
-			if (data.type === "connectionStatus") {
-				setConnectionInfo(data.message);
-			}
-		};
-
-		window.addEventListener("cardboardhrv-main-message", handleMainAppResponse);
-
-		return () => {
-			// Clean up camera stream
-			if (cameraStream) {
-				cameraStream.getTracks().forEach((track) => track.stop());
-			}
-
-			// Clean up WebSocket
-			if (wsRef.current) {
-				wsRef.current.close();
-			}
-
-			// Remove event listener
-			window.removeEventListener(
-				"cardboardhrv-main-message",
-				handleMainAppResponse
-			);
-
-			// Clear any ping intervals
-			if (window.cardboardHrvPingInterval) {
-				clearInterval(window.cardboardHrvPingInterval);
-				window.cardboardHrvPingInterval = null;
-			}
-		};
-	}, [cameraStream]);
-
-	useEffect(() => {
-		// If no session ID is provided, show the manual entry form
-		if (!sessionId) {
-			setStatus("no-session");
-			return;
-		}
-
-		setStatus("connecting");
-
-		// In a real implementation, this would connect to your backend
-		// and establish a WebSocket or WebRTC connection
-		const connectToBackend = async () => {
-			try {
-				// Simulate connection process
-				await new Promise((resolve) => setTimeout(resolve, 1000));
-
-				// Set status to request-camera to show the camera permission button
-				setStatus("request-camera");
-			} catch (err) {
-				console.error("Connection error:", err);
-				setStatus("error");
-				setError("Failed to connect to the application. Please try again.");
-			}
-		};
-
-		connectToBackend();
-	}, [sessionId, navigate, manualSessionId]);
 
 	const handleRetry = () => {
 		window.location.reload();
@@ -517,20 +313,8 @@ function ConnectMobile() {
 			cameraStream.getTracks().forEach((track) => track.stop());
 		}
 
-		// Close WebSocket if open
-		if (wsRef.current) {
-			wsRef.current.close();
-		}
-
-		// Notify the main app that we're disconnecting
-		window.dispatchEvent(
-			new CustomEvent("cardboardhrv-mobile-disconnect", {
-				detail: {
-					sessionId: sessionId || manualSessionId,
-					timestamp: new Date().toISOString(),
-				},
-			})
-		);
+		// Disconnect from the session
+		connectionService.disconnect();
 
 		// This would typically go back to the main app
 		window.close();
@@ -544,30 +328,38 @@ function ConnectMobile() {
 
 	const handleManualSessionSubmit = (e) => {
 		e.preventDefault();
+		const manualSessionId = e.target.elements.sessionId.value;
 		if (!manualSessionId.trim()) {
 			setError("Please enter a valid session ID");
 			return;
 		}
 
 		// Update the URL with the session ID
-		navigate(`/mobile?session=${manualSessionId}`);
+		navigate(`/mobile?session=${manualSessionId}`, { replace: true });
 	};
 
 	const handleConnectWithoutCamera = () => {
 		setStatus("connected-nocamera");
 		setCameraPermission("skipped");
-		notifyMainAppConnected();
+	};
 
-		// Also try the force connection method
-		forceConnectionNotification();
+	// Function to open the monitor page on the desktop
+	const openMonitorPage = () => {
+		// Create a URL to the monitor page with connection parameters
+		const baseUrl = window.location.origin;
+		const monitorUrl = `${baseUrl}/monitor?directConnect=true&sessionId=${sessionId}&timestamp=${Date.now()}`;
 
-		// Add a periodic ping to keep trying to connect
-		const pingInterval = setInterval(() => {
-			forceConnectionNotification();
-		}, 5000); // Try every 5 seconds
+		// Open the monitor URL in a new tab/window
+		window.open(monitorUrl, "_blank");
 
-		// Store the interval ID for cleanup
-		window.cardboardHrvPingInterval = pingInterval;
+		// Also try to navigate the parent window if possible
+		if (window.opener && !window.opener.closed) {
+			window.opener.location.href = monitorUrl;
+		}
+
+		setConnectionInfo(
+			"Opened monitor page. Please check your computer browser."
+		);
 	};
 
 	return (
@@ -595,8 +387,7 @@ function ConnectMobile() {
 							<div className="input-group">
 								<input
 									type="text"
-									value={manualSessionId}
-									onChange={(e) => setManualSessionId(e.target.value)}
+									name="sessionId"
 									placeholder="Enter session ID"
 								/>
 								<button type="submit" className="primary-button">
@@ -626,62 +417,11 @@ function ConnectMobile() {
 					<div className="status connecting">
 						<div className="spinner"></div>
 						<p>Connecting to CardboardHRV application...</p>
-						<p className="session-id">
-							Session ID: {sessionId || manualSessionId}
-						</p>
+						<p className="session-id">Session ID: {sessionId}</p>
 					</div>
 				)}
 
-				{!isSecureContext && (
-					<div className="status warning">
-						<div className="warning-icon">⚠️</div>
-						<h2>Security Warning</h2>
-						<p>This app needs to be accessed via HTTPS for camera access.</p>
-						<p>
-							You can continue without camera functionality, but heart rate
-							monitoring will not be available.
-						</p>
-						<div className="buttons">
-							<button
-								className="primary-button"
-								onClick={handleConnectWithoutCamera}
-							>
-								Continue without camera
-							</button>
-							<button className="secondary-button" onClick={handleGoBack}>
-								Go Back
-							</button>
-						</div>
-					</div>
-				)}
-
-				{isInIframe && (
-					<div className="status warning">
-						<div className="warning-icon">⚠️</div>
-						<h2>Iframe Detected</h2>
-						<p>
-							This app is running in an iframe, which may restrict camera
-							access.
-						</p>
-						<p>For best results, open this page directly in your browser.</p>
-						<div className="buttons">
-							<button
-								className="primary-button"
-								onClick={() => window.open(window.location.href, "_blank")}
-							>
-								Open in New Window
-							</button>
-							<button
-								className="secondary-button"
-								onClick={handleConnectWithoutCamera}
-							>
-								Continue Anyway
-							</button>
-						</div>
-					</div>
-				)}
-
-				{status === "request-camera" && !isInIframe && isSecureContext && (
+				{status === "request-camera" && (
 					<div className="status camera-request">
 						<h2>Connection Successful!</h2>
 						<p>To monitor your heart rate, we need access to your camera.</p>
@@ -918,7 +658,7 @@ function ConnectMobile() {
 								Disconnect
 							</button>
 							<button
-								onClick={redirectToMonitor}
+								onClick={openMonitorPage}
 								style={{
 									padding: "0.5rem",
 									marginTop: "0.5rem",
@@ -1018,8 +758,19 @@ function ConnectMobile() {
 								<p className="browser-info">{browserInfo}</p>
 								<div className="buttons">
 									<button
-										className="primary-button"
 										onClick={handleRequestCameraPermission}
+										style={{
+											padding: "0.75rem",
+											marginTop: "0.5rem",
+											backgroundColor: "#007bff",
+											color: "white",
+											border: "none",
+											borderRadius: "4px",
+											fontWeight: "bold",
+											width: "100%",
+											boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+											cursor: "pointer",
+										}}
 									>
 										Try Camera Access Anyway
 									</button>
@@ -1034,43 +785,12 @@ function ConnectMobile() {
 							</p>
 						</div>
 
-						<div
-							className="debug-info"
-							style={{
-								margin: "1rem 0",
-								padding: "1rem",
-								backgroundColor: "#f0f0f0",
-								borderRadius: "4px",
-								fontSize: "0.8rem",
-							}}
-						>
-							<h4>Debug Information</h4>
-							<p>Session ID: {sessionId || manualSessionId}</p>
-							<p>
-								Connection Status:{" "}
-								{connectionAttempted.current ? "Attempted" : "Not Attempted"}
-							</p>
-							<p>Browser Info: {browserInfo}</p>
-							<button
-								onClick={() => {
-									forceConnectionNotification();
-									alert(
-										"Connection notification sent. Please check your computer."
-									);
-								}}
-								style={{
-									padding: "0.5rem",
-									marginTop: "0.5rem",
-									backgroundColor: "#007bff",
-									color: "white",
-									border: "none",
-									borderRadius: "4px",
-								}}
-							>
-								Force Connection Notification
+						<div className="buttons">
+							<button className="primary-button" onClick={handleGoBack}>
+								Go Back
 							</button>
 							<button
-								onClick={redirectToMonitor}
+								onClick={openMonitorPage}
 								style={{
 									padding: "0.5rem",
 									marginTop: "0.5rem",
@@ -1078,17 +798,10 @@ function ConnectMobile() {
 									color: "white",
 									border: "none",
 									borderRadius: "4px",
-									display: "block",
 									width: "100%",
 								}}
 							>
 								Open Monitor Page Directly
-							</button>
-						</div>
-
-						<div className="buttons">
-							<button className="primary-button" onClick={handleGoBack}>
-								Go Back
 							</button>
 						</div>
 					</div>
@@ -1125,7 +838,7 @@ function ConnectMobile() {
 				}}
 			>
 				<button
-					onClick={redirectToMonitor}
+					onClick={openMonitorPage}
 					style={{
 						padding: "1rem 2rem",
 						backgroundColor: "white",

@@ -1,12 +1,18 @@
-import { useState, useEffect, useRef } from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import {
+	BrowserRouter as Router,
+	Routes,
+	Route,
+	Link,
+	useLocation,
+} from "react-router-dom";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import LiveMonitor from "./components/LiveMonitor";
 import ConnectPhone from "./components/ConnectPhone";
 import ProjectInfo from "./components/ProjectInfo";
 import ConnectMobile from "./components/ConnectMobile";
-import websocketService from "./utils/websocketService";
+import connectionService from "./utils/connectionService";
 import "./App.css";
 
 function App() {
@@ -22,291 +28,126 @@ function App() {
 	});
 	const [sessionId, setSessionId] = useState("");
 	const [connectedSessionId, setConnectedSessionId] = useState(null);
-	const connectionTimeoutRef = useRef(null);
+	const [connectionStatus, setConnectionStatus] = useState("disconnected");
+	const [deviceInfo, setDeviceInfo] = useState(null);
 
-	// Initialize WebSocket service and set up event listeners
+	// Initialize connection service and set up event listeners
 	useEffect(() => {
-		// Initialize the WebSocket service
-		websocketService.initialize();
-
-		// Get or create a persistent session ID
+		// Generate or retrieve a persistent session ID
 		let persistentSessionId;
 		try {
-			// Try to get the session ID from localStorage
 			persistentSessionId = localStorage.getItem("cardboardhrv-session-id");
-
-			// If it doesn't exist, generate a new one and store it
 			if (!persistentSessionId) {
 				persistentSessionId = generateSessionId();
 				localStorage.setItem("cardboardhrv-session-id", persistentSessionId);
 			}
-
-			console.log("Using persistent session ID:", persistentSessionId);
 			setSessionId(persistentSessionId);
 		} catch (e) {
-			// If localStorage fails, fall back to a regular session ID
 			console.error("Failed to use localStorage for session ID:", e);
 			const newSessionId = generateSessionId();
 			setSessionId(newSessionId);
 		}
 
-		// Set up event listeners for WebSocket events
-		websocketService.on("session", handleSessionEvent);
-		websocketService.on("message", handleMessageEvent);
-		websocketService.on("close", handleCloseEvent);
+		// Check URL parameters for direct connection
+		const urlParams = new URLSearchParams(window.location.search);
+		const directConnect = urlParams.get("directConnect");
+		const urlSessionId = urlParams.get("sessionId");
 
-		// Set up event listeners for custom events from mobile device
-		const handleMobileConnect = (event) => {
-			console.log("Mobile device connected:", event.detail);
-			if (event.detail.sessionId === sessionId) {
-				setIsConnected(true);
-				setConnectedSessionId(event.detail.sessionId);
-				console.log("Mobile device connected with matching session ID!");
-
-				// Clear any existing timeout
-				if (connectionTimeoutRef.current) {
-					clearTimeout(connectionTimeoutRef.current);
-				}
-			}
-		};
-
-		const handleMobileMessage = (event) => {
-			console.log("Received message from mobile device:", event.detail);
-			try {
-				const data = JSON.parse(event.detail.data);
-				if (data.type === "heartRateData" && data.sessionId === sessionId) {
-					processHeartRateData(data);
-
-					// Reset the connection timeout whenever we receive data
-					if (connectionTimeoutRef.current) {
-						clearTimeout(connectionTimeoutRef.current);
-					}
-
-					// Set a new timeout - if we don't receive data for 10 seconds, consider the connection lost
-					connectionTimeoutRef.current = setTimeout(() => {
-						console.log("Connection timeout - no data received for 10 seconds");
-						setIsConnected(false);
-						setConnectedSessionId(null);
-					}, 10000);
-				} else if (
-					data.type === "connectionStatus" &&
-					data.sessionId === sessionId
-				) {
-					console.log("Connection status update:", data.message);
-					// This is a direct status update from the mobile device
-					setIsConnected(true);
-					setConnectedSessionId(data.sessionId);
-				} else if (data.type === "ping" && data.sessionId === sessionId) {
-					// Reset the connection timeout on ping
-					if (connectionTimeoutRef.current) {
-						clearTimeout(connectionTimeoutRef.current);
-					}
-
-					connectionTimeoutRef.current = setTimeout(() => {
-						console.log("Connection timeout - no data received for 10 seconds");
-						setIsConnected(false);
-						setConnectedSessionId(null);
-					}, 10000);
-				}
-			} catch (error) {
-				console.error("Error processing mobile message:", error);
-			}
-		};
-
-		const handleMobileDisconnect = (event) => {
-			console.log("Mobile device disconnected:", event.detail);
-			if (event.detail.sessionId === sessionId) {
-				setIsConnected(false);
-				setConnectedSessionId(null);
-
-				// Clear the connection timeout
-				if (connectionTimeoutRef.current) {
-					clearTimeout(connectionTimeoutRef.current);
-					connectionTimeoutRef.current = null;
-				}
-			}
-		};
-
-		window.addEventListener("cardboardhrv-mobile-connect", handleMobileConnect);
-		window.addEventListener("cardboardhrv-mobile-message", handleMobileMessage);
-		window.addEventListener(
-			"cardboardhrv-mobile-close",
-			handleMobileDisconnect
-		);
-		window.addEventListener(
-			"cardboardhrv-mobile-disconnect",
-			handleMobileDisconnect
-		);
-
-		// Check localStorage periodically for connection data
-		const checkLocalStorage = () => {
-			try {
-				const connectionData = localStorage.getItem("cardboardhrv-connection");
-				if (connectionData) {
-					const data = JSON.parse(connectionData);
-					console.log("Found connection data in localStorage:", data);
-
-					if (data.sessionId === sessionId && data.connected) {
-						console.log("Setting connected state from localStorage data");
-						setIsConnected(true);
-						setConnectedSessionId(data.sessionId);
-
-						// Clear the data to avoid duplicate processing
-						localStorage.removeItem("cardboardhrv-connection");
-					}
-				}
-			} catch (e) {
-				console.error("Error checking localStorage:", e);
-			}
-		};
-
-		// Set up interval to check localStorage
-		const localStorageInterval = setInterval(checkLocalStorage, 2000);
-
-		// Set up BroadcastChannel if available
-		let broadcastChannel;
-		try {
-			if (typeof BroadcastChannel !== "undefined") {
-				broadcastChannel = new BroadcastChannel("cardboardhrv-channel");
-				broadcastChannel.onmessage = (event) => {
-					console.log("Received message via BroadcastChannel:", event.data);
-
-					if (
-						event.data.type === "connection" &&
-						event.data.sessionId === sessionId
-					) {
-						console.log("Setting connected state from BroadcastChannel");
-						setIsConnected(true);
-						setConnectedSessionId(event.data.sessionId);
-					}
-				};
-			}
-		} catch (e) {
-			console.error("Error setting up BroadcastChannel:", e);
+		if (directConnect === "true" && urlSessionId) {
+			console.log("Direct connection parameters found in URL:", urlSessionId);
+			setSessionId(urlSessionId);
+			persistentSessionId = urlSessionId;
 		}
 
-		// Listen for window messages (for postMessage communication)
-		const handleWindowMessage = (event) => {
-			// Validate the origin if needed
-			console.log("Received window message:", event.data);
+		// Initialize connection service
+		const initializeConnection = async () => {
+			if (!persistentSessionId) return;
 
-			if (event.data && event.data.type === "cardboardhrv-connection") {
-				if (event.data.sessionId === sessionId) {
-					console.log("Setting connected state from window message");
-					setIsConnected(true);
-					setConnectedSessionId(event.data.sessionId);
-				}
+			// Determine if this is a mobile device
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+			const deviceType = isMobile ? "mobile" : "desktop";
+
+			// Initialize connection service
+			const success = await connectionService.initialize(
+				persistentSessionId,
+				deviceType
+			);
+			if (success) {
+				console.log(`Initialized connection service as ${deviceType}`);
+			} else {
+				console.error("Failed to initialize connection service");
+			}
+
+			// Set up event listeners
+			connectionService.on(
+				"connectionStatusChanged",
+				handleConnectionStatusChanged
+			);
+			connectionService.on("devicesPaired", handleDevicesPaired);
+			connectionService.on("deviceDisconnected", handleDeviceDisconnected);
+			connectionService.on("heartRateData", handleHeartRateData);
+			connectionService.on("message", handleMessage);
+
+			// If this is a direct connection, generate initial data
+			if (directConnect === "true") {
+				generateInitialData();
 			}
 		};
 
-		window.addEventListener("message", handleWindowMessage);
+		initializeConnection();
 
-		// Check for direct connection parameters in URL
-		const checkUrlParameters = () => {
-			try {
-				const urlParams = new URLSearchParams(window.location.search);
-				const directConnect = urlParams.get("directConnect");
-				const urlSessionId = urlParams.get("sessionId");
-
-				if (directConnect === "true" && urlSessionId) {
-					console.log(
-						"Direct connection parameters found in URL:",
-						urlSessionId
-					);
-
-					if (urlSessionId === sessionId) {
-						console.log("Setting connected state from URL parameters");
-						setIsConnected(true);
-						setConnectedSessionId(urlSessionId);
-
-						// Generate some initial data
-						generateInitialData();
-					}
-				}
-			} catch (e) {
-				console.error("Error checking URL parameters:", e);
-			}
-		};
-
-		// Run the check immediately
-		checkUrlParameters();
-
+		// Clean up event listeners
 		return () => {
-			// Clean up WebSocket service
-			websocketService.off("session", handleSessionEvent);
-			websocketService.off("message", handleMessageEvent);
-			websocketService.off("close", handleCloseEvent);
-			websocketService.cleanup();
-
-			// Remove custom event listeners
-			window.removeEventListener(
-				"cardboardhrv-mobile-connect",
-				handleMobileConnect
+			connectionService.off(
+				"connectionStatusChanged",
+				handleConnectionStatusChanged
 			);
-			window.removeEventListener(
-				"cardboardhrv-mobile-message",
-				handleMobileMessage
-			);
-			window.removeEventListener(
-				"cardboardhrv-mobile-close",
-				handleMobileDisconnect
-			);
-			window.removeEventListener(
-				"cardboardhrv-mobile-disconnect",
-				handleMobileDisconnect
-			);
+			connectionService.off("devicesPaired", handleDevicesPaired);
+			connectionService.off("deviceDisconnected", handleDeviceDisconnected);
+			connectionService.off("heartRateData", handleHeartRateData);
+			connectionService.off("message", handleMessage);
 
-			// Clear any timeouts
-			if (connectionTimeoutRef.current) {
-				clearTimeout(connectionTimeoutRef.current);
-			}
-
-			// Clear interval
-			clearInterval(localStorageInterval);
-			if (broadcastChannel) {
-				broadcastChannel.close();
-			}
-			window.removeEventListener("message", handleWindowMessage);
-
-			// Remove data interval
-			if (window.cardboardHrvDataInterval) {
-				clearInterval(window.cardboardHrvDataInterval);
-				window.cardboardHrvDataInterval = null;
-			}
+			// Disconnect from the session
+			connectionService.disconnect();
 		};
-	}, [sessionId]);
+	}, []);
 
-	// Handle session event (mobile device connected with session ID)
-	const handleSessionEvent = (event) => {
-		console.log("Session event:", event);
-		if (event.sessionId === sessionId) {
-			setIsConnected(true);
-			setConnectedSessionId(event.sessionId);
-			console.log("Mobile device connected with matching session ID!");
-		}
+	// Handle connection status changes
+	const handleConnectionStatusChanged = (data) => {
+		console.log("Connection status changed:", data.status);
+		setConnectionStatus(data.status);
 	};
 
-	// Handle message event (data from mobile device)
-	const handleMessageEvent = (event) => {
-		console.log("Message event:", event);
-		if (
-			event.client.sessionId === sessionId &&
-			event.data.type === "heartRateData"
-		) {
-			processHeartRateData(event.data);
-		}
+	// Handle devices paired event
+	const handleDevicesPaired = (data) => {
+		console.log("Devices paired:", data);
+		setIsConnected(true);
+		setConnectedSessionId(sessionId);
+		setDeviceInfo(data);
 	};
 
-	// Handle close event (mobile device disconnected)
-	const handleCloseEvent = (event) => {
-		console.log("Close event:", event);
-		if (event.client.sessionId === sessionId) {
+	// Handle device disconnected event
+	const handleDeviceDisconnected = (data) => {
+		console.log("Device disconnected:", data);
+		if (!data.isMobileConnected || !data.isDesktopConnected) {
 			setIsConnected(false);
-			setConnectedSessionId(null);
+			setDeviceInfo(null);
 		}
 	};
 
-	// Function to process heart rate data from mobile device
+	// Handle heart rate data event
+	const handleHeartRateData = (data) => {
+		console.log("Heart rate data received:", data);
+		processHeartRateData(data);
+	};
+
+	// Handle message event
+	const handleMessage = (data) => {
+		console.log("Message received:", data);
+		// Handle messages as needed
+	};
+
+	// Function to process heart rate data
 	const processHeartRateData = (data) => {
 		// Update current heart rate
 		setCurrentHeartRate(data.heartRate);
@@ -315,7 +156,7 @@ function App() {
 		const newDataPoint = {
 			timestamp: new Date(data.timestamp),
 			heartRate: data.heartRate,
-			rawData: data.rawData,
+			rawData: data.rawData || 0,
 		};
 
 		setHeartRateData((prevData) => {
@@ -364,45 +205,7 @@ function App() {
 
 	// Function to send a message to the connected mobile device
 	const sendMessageToMobile = (message) => {
-		if (connectedSessionId) {
-			window.dispatchEvent(
-				new CustomEvent("cardboardhrv-main-message", {
-					detail: {
-						data: JSON.stringify({
-							type: "connectionStatus",
-							sessionId: connectedSessionId,
-							message: message,
-						}),
-					},
-				})
-			);
-			return true;
-		}
-		return false;
-	};
-
-	// Add a debug function to the App component:
-	const debugConnectionStatus = () => {
-		console.log("Current connection status:", {
-			isConnected,
-			connectedSessionId,
-			sessionId,
-		});
-
-		// Check if there are any stored connection attempts
-		try {
-			const connectionData = localStorage.getItem("cardboardhrv-connection");
-			console.log("localStorage connection data:", connectionData);
-		} catch (e) {
-			console.error("Error checking localStorage:", e);
-		}
-
-		// Force the connection state for testing
-		if (!isConnected && window.confirm("Force connection state for testing?")) {
-			setIsConnected(true);
-			setConnectedSessionId(sessionId);
-			alert("Connection state forced to connected!");
-		}
+		return connectionService.sendMessage(message);
 	};
 
 	// Function to generate initial data for direct connections
@@ -459,6 +262,12 @@ function App() {
 
 			// Calculate HRV metrics
 			calculateHRVMetrics(newHeartRate);
+
+			// Send heart rate data to the connection service
+			connectionService.sendHeartRateData({
+				heartRate: newHeartRate,
+				rawData: Math.random() * 100,
+			});
 		}, 1000);
 
 		// Store the interval ID for cleanup
@@ -507,6 +316,8 @@ function App() {
 									currentHeartRate={currentHeartRate}
 									hrvMetrics={hrvMetrics}
 									sendMessageToMobile={sendMessageToMobile}
+									connectionStatus={connectionStatus}
+									deviceInfo={deviceInfo}
 								/>
 							}
 						/>
@@ -518,7 +329,8 @@ function App() {
 									onConnect={connectToBackend}
 									sessionId={sessionId}
 									connectedSessionId={connectedSessionId}
-									debugConnectionStatus={debugConnectionStatus}
+									connectionStatus={connectionStatus}
+									deviceInfo={deviceInfo}
 								/>
 							}
 						/>
