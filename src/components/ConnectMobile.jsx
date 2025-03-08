@@ -11,20 +11,23 @@ function ConnectMobile() {
 	const [cameraPermission, setCameraPermission] = useState(null);
 	const videoRef = useRef(null);
 	const [showCameraTest, setShowCameraTest] = useState(false);
+	const [cameraStream, setCameraStream] = useState(null);
 
-	// Function to explicitly request camera permission
+	// Function to explicitly request camera permission with a direct user interaction
 	const requestCameraPermission = async () => {
 		try {
 			console.log("Explicitly requesting camera permission...");
+
+			// Try with simpler constraints first
 			const stream = await navigator.mediaDevices.getUserMedia({
-				video: {
-					facingMode: "user", // Prefer front camera
-					width: { ideal: 1280 },
-					height: { ideal: 720 },
-				},
+				video: true,
+				audio: false,
 			});
 
-			// Show the camera feed briefly to confirm it's working
+			console.log("Camera permission granted!");
+			setCameraStream(stream);
+
+			// Show the camera feed to confirm it's working
 			if (videoRef.current) {
 				videoRef.current.srcObject = stream;
 				setShowCameraTest(true);
@@ -32,11 +35,7 @@ function ConnectMobile() {
 				// After 3 seconds, hide the camera test
 				setTimeout(() => {
 					setShowCameraTest(false);
-					// Stop all tracks
-					if (stream) {
-						stream.getTracks().forEach((track) => track.stop());
-					}
-					// Set camera permission as granted
+					// Don't stop the stream yet, keep it active for the connection
 					setCameraPermission("granted");
 					setStatus("connected");
 				}, 3000);
@@ -45,6 +44,9 @@ function ConnectMobile() {
 			return true;
 		} catch (err) {
 			console.error("Camera permission request failed:", err);
+			console.error("Error name:", err.name);
+			console.error("Error message:", err.message);
+
 			if (err.name === "NotAllowedError") {
 				setCameraPermission("denied");
 			} else if (err.name === "NotFoundError") {
@@ -56,6 +58,15 @@ function ConnectMobile() {
 			return false;
 		}
 	};
+
+	// Clean up camera stream when component unmounts
+	useEffect(() => {
+		return () => {
+			if (cameraStream) {
+				cameraStream.getTracks().forEach((track) => track.stop());
+			}
+		};
+	}, [cameraStream]);
 
 	useEffect(() => {
 		if (!sessionId) {
@@ -111,6 +122,11 @@ function ConnectMobile() {
 	};
 
 	const handleGoBack = () => {
+		// Stop camera stream if active
+		if (cameraStream) {
+			cameraStream.getTracks().forEach((track) => track.stop());
+		}
+
 		// This would typically go back to the main app
 		window.close();
 		// If window.close() doesn't work (e.g., the page wasn't opened by a script)
@@ -119,6 +135,12 @@ function ConnectMobile() {
 
 	const handleRequestCameraPermission = async () => {
 		await requestCameraPermission();
+	};
+
+	// Function to open Chrome settings directly
+	const openChromeSettings = () => {
+		// This will open Chrome's camera settings page
+		window.open("chrome://settings/content/camera", "_blank");
 	};
 
 	return (
@@ -163,6 +185,11 @@ function ConnectMobile() {
 							</p>
 						</div>
 
+						<div className="camera-test-placeholder">
+							<div className="camera-icon">📷</div>
+							<p>Your camera will appear here</p>
+						</div>
+
 						<button
 							className="primary-button camera-button"
 							onClick={handleRequestCameraPermission}
@@ -195,6 +222,7 @@ function ConnectMobile() {
 							muted
 							className="camera-test-video"
 						/>
+						<p>Camera is working! Continuing in a moment...</p>
 					</div>
 				)}
 
@@ -243,12 +271,28 @@ function ConnectMobile() {
 									<li>Find "Camera" and change it to "Allow"</li>
 									<li>Refresh this page</li>
 								</ol>
-								<button
-									className="primary-button"
-									onClick={handleRequestCameraPermission}
-								>
-									Try Again
-								</button>
+
+								<div className="chrome-settings-note">
+									<p>If you don't see the camera permission option:</p>
+									<ol>
+										<li>Open Chrome Settings</li>
+										<li>Go to Site Settings {"->"} Camera</li>
+										<li>Make sure this site is not blocked</li>
+										<li>Return to this page and try again</li>
+									</ol>
+								</div>
+
+								<div className="buttons">
+									<button
+										className="primary-button"
+										onClick={handleRequestCameraPermission}
+									>
+										Try Again
+									</button>
+									<button className="secondary-button" onClick={handleRetry}>
+										Refresh Page
+									</button>
+								</div>
 							</div>
 						)}
 
