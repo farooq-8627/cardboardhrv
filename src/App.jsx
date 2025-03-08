@@ -5,6 +5,7 @@ import Footer from "./components/Footer";
 import LiveMonitor from "./components/LiveMonitor";
 import ProjectInfo from "./components/ProjectInfo";
 import ConnectPhone from "./components/ConnectPhone";
+import ConnectMobile from "./components/ConnectMobile";
 import "./App.css";
 
 function App() {
@@ -126,6 +127,7 @@ function App() {
 							}
 						/>
 						<Route path="/info" element={<ProjectInfo />} />
+						<Route path="/connect-mobile" element={<ConnectMobile />} />
 					</Routes>
 				</main>
 

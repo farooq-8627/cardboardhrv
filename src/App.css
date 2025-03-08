@@ -666,3 +666,112 @@ ul {
 	max-width: 200px;
 	text-align: center;
 }
+
+/* Connect Mobile Page */
+.connect-mobile {
+	max-width: 600px;
+	margin: 0 auto;
+	padding: 2rem 1rem;
+	text-align: center;
+}
+
+.connect-mobile h1 {
+	color: var(--primary-color);
+	margin-bottom: 2rem;
+}
+
+.connection-status-container {
+	background-color: var(--card-bg);
+	border-radius: var(--border-radius);
+	box-shadow: var(--box-shadow);
+	padding: 2rem;
+}
+
+.status {
+	padding: 1rem;
+}
+
+.spinner {
+	width: 50px;
+	height: 50px;
+	border: 5px solid rgba(0, 0, 0, 0.1);
+	border-radius: 50%;
+	border-top-color: var(--primary-color);
+	margin: 0 auto 1.5rem;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.success-icon,
+.error-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.success-icon {
+	color: var(--success-color);
+}
+
+.error-icon {
+	color: var(--danger-color);
+}
+
+.session-id {
+	font-family: monospace;
+	background-color: rgba(0, 0, 0, 0.05);
+	padding: 0.5rem;
+	border-radius: 4px;
+	margin-top: 1rem;
+}
+
+.error-message {
+	color: var(--danger-color);
+	margin: 1rem 0;
+}
+
+.instruction {
+	font-style: italic;
+	margin: 1.5rem 0;
+}
+
+.buttons {
+	display: flex;
+	gap: 1rem;
+	justify-content: center;
+	margin-top: 2rem;
+}
+
+.primary-button,
+.secondary-button {
+	padding: 0.75rem 1.5rem;
+	font-weight: 500;
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: var(--transition);
+}
+
+.primary-button {
+	background-color: var(--primary-color);
+	color: white;
+}
+
+.secondary-button {
+	background-color: var(--light-color);
+	color: var(--dark-color);
+	border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.primary-button:hover {
+	background-color: #3a56d4;
+	transform: translateY(-2px);
+}
+
+.secondary-button:hover {
+	background-color: #e9ecef;
+	transform: translateY(-2px);
+}

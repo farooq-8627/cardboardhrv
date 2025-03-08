@@ -13,7 +13,9 @@ function ConnectPhone({ isConnected, onConnect }) {
 		const generateSessionId = () => {
 			const sessionId = Math.random().toString(36).substring(2, 15);
 			const baseUrl = window.location.origin;
+			// This URL will work both locally and when deployed
 			const connectionUrl = `${baseUrl}/connect-mobile?session=${sessionId}`;
+			console.log("Connection URL:", connectionUrl);
 			setQrValue(connectionUrl);
 
 			// In a real implementation, you'd register this session with your backend
@@ -26,8 +28,10 @@ function ConnectPhone({ isConnected, onConnect }) {
 			.then((response) => response.json())
 			.then((data) => {
 				setIpAddress(data.ip);
+				console.log("IP Address detected:", data.ip);
 			})
-			.catch(() => {
+			.catch((error) => {
+				console.error("Error detecting IP:", error);
 				setIpAddress("Unable to detect");
 			});
 	}, []);
