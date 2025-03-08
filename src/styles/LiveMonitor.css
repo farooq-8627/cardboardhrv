@@ -7,6 +7,12 @@
 	margin: 0;
 }
 
+.content-container {
+	max-width: 1200px;
+	margin: 0 auto;
+	width: 100%;
+}
+
 .page-title {
 	text-align: center;
 	color: #333;

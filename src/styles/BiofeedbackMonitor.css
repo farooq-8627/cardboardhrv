@@ -1,0 +1,139 @@
+.biofeedback-monitor {
+	background-color: #1a1a2e;
+	border-radius: 12px;
+	padding: 20px;
+	color: #e6e6e6;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	margin-top: 2rem;
+}
+
+.biofeedback-monitor h2 {
+	text-align: center;
+	margin-bottom: 20px;
+	color: #4cc9f0;
+	font-size: 1.8rem;
+}
+
+.metrics-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 20px;
+}
+
+.metric-card {
+	background-color: #16213e;
+	border-radius: 8px;
+	padding: 15px;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.metric-card h3 {
+	margin-top: 0;
+	color: #4cc9f0;
+	font-size: 1.2rem;
+}
+
+.current-value {
+	display: flex;
+	align-items: baseline;
+	margin: 10px 0;
+}
+
+.value {
+	font-size: 2.5rem;
+	font-weight: bold;
+	color: #f8f9fa;
+}
+
+.unit {
+	margin-left: 8px;
+	color: #adb5bd;
+	font-size: 1rem;
+}
+
+.normal-range {
+	font-size: 0.9rem;
+	color: #adb5bd;
+	margin-bottom: 15px;
+}
+
+.history-graph {
+	height: 100px;
+	margin-top: auto;
+	border-bottom: 1px solid #4cc9f0;
+	position: relative;
+}
+
+.graph-line,
+.bp-graph {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-end;
+	height: 100%;
+	width: 100%;
+}
+
+.data-point {
+	flex: 1;
+	margin: 0 2px;
+	background-color: #4cc9f0;
+	border-radius: 2px 2px 0 0;
+	transition: height 0.3s ease;
+}
+
+.bp-graph {
+	position: relative;
+}
+
+.systolic-line,
+.diastolic-line {
+	position: absolute;
+	bottom: 0;
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+}
+
+.systolic {
+	background-color: #f72585;
+}
+
+.diastolic {
+	background-color: #7209b7;
+}
+
+.legend {
+	display: flex;
+	justify-content: space-around;
+	margin-top: 5px;
+	font-size: 0.8rem;
+}
+
+.systolic-legend {
+	color: #f72585;
+}
+
+.diastolic-legend {
+	color: #7209b7;
+}
+
+.disconnected {
+	text-align: center;
+	padding: 40px;
+}
+
+.disconnected p {
+	color: #adb5bd;
+}
+
+@media (max-width: 768px) {
+	.metrics-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.value {
+		font-size: 2rem;
+	}
+}

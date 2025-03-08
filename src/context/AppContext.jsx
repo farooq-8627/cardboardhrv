@@ -62,12 +62,143 @@ const AppProvider = ({ children }) => {
 	const [cameraFrame, setCameraFrame] = useState(null);
 	const [lastFrameTime, setLastFrameTime] = useState(null);
 	const [isRecording, setIsRecording] = useState(false);
+
+	// Additional biometric data for the enhanced monitor
+	const [biometrics, setBiometrics] = useState({
+		bloodPressure: { systolic: 0, diastolic: 0 },
+		oxygenLevel: 0,
+		temperature: 0,
+		respirationRate: 0,
+	});
+
+	// History for biometric data
+	const [biometricsHistory, setBiometricsHistory] = useState({
+		heartRate: [],
+		systolic: [],
+		diastolic: [],
+		oxygenLevel: [],
+		temperature: [],
+		respirationRate: [],
+	});
+
 	const recordingTimeoutRef = useRef(null);
 
 	// Refs to prevent duplicate event listeners and track initialization
 	const eventListenersSet = useRef(false);
 	const initializationInProgress = useRef(false);
 	const isInitialized = useRef(false);
+	const simulationIntervalRef = useRef(null);
+
+	// Helper function to simulate realistic biometric fluctuations
+	const simulateValue = (current, min, max, maxChange) => {
+		// Random change within maxChange range
+		const change = Math.random() * maxChange * 2 - maxChange;
+		let newValue = current + change;
+
+		// Keep within realistic bounds
+		if (newValue < min) newValue = min;
+		if (newValue > max) newValue = max;
+
+		return Number(newValue.toFixed(1));
+	};
+
+	// Simulate biometric data when connected
+	useEffect(() => {
+		if (connectionStatus === "connected") {
+			// Initialize with realistic starting values if not already set
+			if (biometrics.bloodPressure.systolic === 0) {
+				setBiometrics({
+					bloodPressure: { systolic: 120, diastolic: 80 },
+					oxygenLevel: 98,
+					temperature: 37.0,
+					respirationRate: 14,
+				});
+			}
+
+			// Set up interval for simulating data
+			simulationIntervalRef.current = setInterval(() => {
+				// Update biometrics with simulated values
+				setBiometrics((prev) => ({
+					bloodPressure: {
+						systolic: simulateValue(prev.bloodPressure.systolic, 110, 140, 3),
+						diastolic: simulateValue(prev.bloodPressure.diastolic, 70, 90, 2),
+					},
+					oxygenLevel: simulateValue(prev.oxygenLevel, 95, 100, 1),
+					temperature: simulateValue(prev.temperature, 36.5, 37.5, 0.1),
+					respirationRate: simulateValue(prev.respirationRate, 12, 20, 1),
+				}));
+
+				// If no real heart rate data, simulate it
+				if (
+					!heartRateData.length ||
+					Date.now() - heartRateData[heartRateData.length - 1]?.timestamp > 5000
+				) {
+					const simulatedHR = currentHeartRate
+						? simulateValue(currentHeartRate, 60, 100, 2)
+						: Math.floor(Math.random() * 20) + 70; // 70-90 range
+
+					setCurrentHeartRate(simulatedHR);
+
+					// Add to heart rate data
+					const timestamp = Date.now();
+					setHeartRateData((prev) => {
+						const newData = [
+							...prev,
+							{
+								timestamp,
+								value: simulatedHR,
+								ppg: Math.random(), // Simulated PPG value
+							},
+						];
+						return newData.slice(-60); // Keep last 60 readings
+					});
+
+					// Update HRV metrics with simulated values
+					setHrvMetrics({
+						sdnn: Math.floor(Math.random() * 30) + 30, // 30-60 range
+						rmssd: Math.floor(Math.random() * 20) + 20, // 20-40 range
+						lf: Math.floor(Math.random() * 500) + 500, // 500-1000 range
+						hf: Math.floor(Math.random() * 500) + 200, // 200-700 range
+						lfhf: Number((Math.random() * 2 + 1).toFixed(1)), // 1.0-3.0 range
+					});
+				}
+
+				// Update history
+				setBiometricsHistory((prev) => {
+					const maxHistoryLength = 10;
+					return {
+						heartRate: [...prev.heartRate, currentHeartRate].slice(
+							-maxHistoryLength
+						),
+						systolic: [
+							...prev.systolic,
+							biometrics.bloodPressure.systolic,
+						].slice(-maxHistoryLength),
+						diastolic: [
+							...prev.diastolic,
+							biometrics.bloodPressure.diastolic,
+						].slice(-maxHistoryLength),
+						oxygenLevel: [...prev.oxygenLevel, biometrics.oxygenLevel].slice(
+							-maxHistoryLength
+						),
+						temperature: [...prev.temperature, biometrics.temperature].slice(
+							-maxHistoryLength
+						),
+						respirationRate: [
+							...prev.respirationRate,
+							biometrics.respirationRate,
+						].slice(-maxHistoryLength),
+					};
+				});
+			}, 2000);
+		}
+
+		return () => {
+			if (simulationIntervalRef.current) {
+				clearInterval(simulationIntervalRef.current);
+			}
+		};
+	}, [connectionStatus, currentHeartRate, heartRateData]);
 
 	// Memoize event handlers
 	const handleConnectionStatusChanged = useCallback((data) => {
@@ -198,32 +329,64 @@ const AppProvider = ({ children }) => {
 		[lastFrameTime, syncRecordingStatus]
 	);
 
-	// Setup event listeners once
-	const setupEventListeners = useCallback(() => {
-		if (eventListenersSet.current) {
-			console.log("Event listeners already set up");
-			return;
-		}
+	// Initialize connection service
+	const initializeConnection = useCallback(
+		async (sessionId, deviceType) => {
+			if (initializationInProgress.current) {
+				console.log("Initialization already in progress, skipping");
+				return false;
+			}
 
-		console.log("Setting up event listeners");
-		connectionService.on(
-			"connectionStatusChanged",
-			handleConnectionStatusChanged
-		);
-		connectionService.on("devicesPaired", handleDevicesPaired);
-		connectionService.on("heartRateData", handleHeartRateData);
+			if (isInitialized.current) {
+				console.log("Already initialized, skipping");
+				return true;
+			}
 
-		eventListenersSet.current = true;
-	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
+			initializationInProgress.current = true;
+			console.log("Initializing connection:", sessionId, deviceType);
+
+			try {
+				// Set up event listeners if not already set
+				if (!eventListenersSet.current) {
+					console.log("Setting up event listeners");
+					connectionService.on(
+						"connectionStatusChanged",
+						handleConnectionStatusChanged
+					);
+					connectionService.on("devicesPaired", handleDevicesPaired);
+					connectionService.on("heartRateData", handleHeartRateData);
+					eventListenersSet.current = true;
+				}
+
+				// Initialize connection service
+				const success = await connectionService.initialize(
+					sessionId,
+					deviceType
+				);
+				if (success) {
+					console.log("Connection service initialized successfully");
+					setSessionId(sessionId);
+					localStorage.setItem("cardboardhrv-session-id", sessionId);
+					isInitialized.current = true;
+					initializationInProgress.current = false;
+					return true;
+				} else {
+					console.error("Failed to initialize connection service");
+					initializationInProgress.current = false;
+					return false;
+				}
+			} catch (error) {
+				console.error("Error initializing connection:", error);
+				initializationInProgress.current = false;
+				return false;
+			}
+		},
+		[handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]
+	);
 
 	// Cleanup function
 	const cleanup = useCallback(() => {
 		console.log("Cleaning up AppContext");
-		if (recordingTimeoutRef.current) {
-			clearTimeout(recordingTimeoutRef.current);
-		}
-
-		// Remove event listeners
 		if (eventListenersSet.current) {
 			connectionService.off(
 				"connectionStatusChanged",
@@ -234,67 +397,19 @@ const AppProvider = ({ children }) => {
 			eventListenersSet.current = false;
 		}
 
-		// Reset state
-		setIsRecording(false);
-		setCameraFrame(null);
-		setHeartRateData([]);
-		setCurrentHeartRate(0);
-		setHrvMetrics({
-			sdnn: 0,
-			rmssd: 0,
-			lf: 0,
-			hf: 0,
-			lfhf: 0,
-		});
-		setLastFrameTime(null);
-		setConnectionStatus("disconnected");
-		setDeviceInfo(null);
+		if (recordingTimeoutRef.current) {
+			clearTimeout(recordingTimeoutRef.current);
+			recordingTimeoutRef.current = null;
+		}
 
-		// Reset refs
+		if (simulationIntervalRef.current) {
+			clearInterval(simulationIntervalRef.current);
+			simulationIntervalRef.current = null;
+		}
+
 		isInitialized.current = false;
 		initializationInProgress.current = false;
 	}, [handleConnectionStatusChanged, handleDevicesPaired, handleHeartRateData]);
-
-	// Initialize connection service
-	const initializeConnection = useCallback(
-		async (newSessionId, deviceType) => {
-			if (!newSessionId || initializationInProgress.current) {
-				console.log(
-					"Initialization skipped - already in progress or no session ID"
-				);
-				return false;
-			}
-
-			if (isInitialized.current && sessionId === newSessionId) {
-				console.log("Already initialized with this session ID");
-				return true;
-			}
-
-			try {
-				console.log("Initializing connection:", newSessionId, deviceType);
-				initializationInProgress.current = true;
-				setupEventListeners();
-
-				const success = await connectionService.initialize(
-					newSessionId,
-					deviceType
-				);
-				if (success) {
-					setSessionId(newSessionId);
-					localStorage.setItem("cardboardhrv-session-id", newSessionId);
-					isInitialized.current = true;
-					return true;
-				}
-				return false;
-			} catch (error) {
-				console.error("Error initializing connection:", error);
-				return false;
-			} finally {
-				initializationInProgress.current = false;
-			}
-		},
-		[setupEventListeners, sessionId]
-	);
 
 	// Cleanup on unmount
 	useEffect(() => {
@@ -303,7 +418,8 @@ const AppProvider = ({ children }) => {
 		};
 	}, [cleanup]);
 
-	const value = {
+	// Context value
+	const contextValue = {
 		isConnected,
 		heartRateData,
 		currentHeartRate,
@@ -316,21 +432,20 @@ const AppProvider = ({ children }) => {
 		isRecording,
 		initializeConnection,
 		handleCameraFrame,
-		syncRecordingStatus,
 		cleanup,
+		syncRecordingStatus,
+		biometrics,
+		biometricsHistory,
 	};
 
-	return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+	return (
+		<AppContext.Provider value={contextValue}>{children}</AppContext.Provider>
+	);
 };
 
-// Create a custom hook
+// Custom hook to use the context
 const useAppContext = () => {
-	const context = useContext(AppContext);
-	if (!context) {
-		throw new Error("useAppContext must be used within an AppProvider");
-	}
-	return context;
+	return useContext(AppContext);
 };
 
-// Export both the Provider and the hook
 export { AppProvider, useAppContext };
