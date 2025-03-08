@@ -151,6 +151,9 @@ function ConnectMobile() {
 				`Browser: ${navigator.userAgent}, Secure Context: ${window.isSecureContext}`
 			);
 
+			// Show a loading state
+			setConnectionInfo("Requesting camera access...");
+
 			// Make sure we're using the most reliable approach for modern Chrome
 			const stream = await navigator.mediaDevices.getUserMedia({
 				video: {
@@ -169,13 +172,8 @@ function ConnectMobile() {
 				videoRef.current.srcObject = stream;
 				setShowCameraTest(true);
 
-				// After 3 seconds, start streaming
-				setTimeout(() => {
-					setShowCameraTest(false);
-					setCameraPermission("granted");
-					setStatus("connected");
-					startStreaming(stream);
-				}, 3000);
+				// Update connection info
+				setConnectionInfo("Camera access granted. Testing camera feed...");
 			}
 
 			return true;
@@ -653,23 +651,35 @@ function ConnectMobile() {
 
 						<p className="connection-info">{connectionInfo}</p>
 
-						<div className="buttons">
+						<div
+							className="connection-status-message"
+							style={{
+								marginTop: "1rem",
+								padding: "1rem",
+								backgroundColor: "#f8f9fa",
+								borderRadius: "8px",
+							}}
+						>
+							<h3 style={{ color: "#28a745", marginBottom: "0.5rem" }}>
+								Connection Active
+							</h3>
+							<p>Your phone is now connected to your computer.</p>
+							<p>
+								Please check your computer screen to see your heart rate data.
+							</p>
+							<p style={{ fontWeight: "bold", marginTop: "0.5rem" }}>
+								Instructions:
+							</p>
+							<ol style={{ marginLeft: "1.5rem", marginTop: "0.5rem" }}>
+								<li>Place your fingertip gently over the camera lens</li>
+								<li>Keep your finger still for accurate readings</li>
+								<li>Ensure good lighting for best results</li>
+							</ol>
+						</div>
+
+						<div className="buttons" style={{ marginTop: "1rem" }}>
 							<button className="primary-button" onClick={handleGoBack}>
 								Disconnect
-							</button>
-							<button
-								onClick={openMonitorPage}
-								style={{
-									padding: "0.5rem",
-									marginTop: "0.5rem",
-									backgroundColor: "#28a745",
-									color: "white",
-									border: "none",
-									borderRadius: "4px",
-									width: "100%",
-								}}
-							>
-								Open Monitor Page Directly
 							</button>
 						</div>
 					</div>
@@ -823,36 +833,6 @@ function ConnectMobile() {
 						</div>
 					</div>
 				)}
-			</div>
-
-			<div
-				style={{
-					position: "fixed",
-					bottom: "20px",
-					left: "0",
-					right: "0",
-					padding: "1rem",
-					backgroundColor: "rgba(40, 167, 69, 0.9)",
-					textAlign: "center",
-					zIndex: "1000",
-				}}
-			>
-				<button
-					onClick={openMonitorPage}
-					style={{
-						padding: "1rem 2rem",
-						backgroundColor: "white",
-						color: "#28a745",
-						border: "none",
-						borderRadius: "4px",
-						fontWeight: "bold",
-						fontSize: "1.1rem",
-						boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-						cursor: "pointer",
-					}}
-				>
-					Open Monitor on Computer
-				</button>
 			</div>
 		</div>
 	);

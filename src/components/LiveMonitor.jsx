@@ -252,37 +252,65 @@ function LiveMonitor() {
 									</p>
 								</div>
 							)}
+							{connectionStatus === "connecting" && (
+								<div className="connection-instructions" style={{ marginTop: "1rem", padding: "1rem", backgroundColor: "#f8f9fa", borderRadius: "8px" }}>
+									<h3 style={{ marginBottom: "0.5rem" }}>Waiting for Mobile Device</h3>
+									<p>Please scan the QR code on the Connect Phone page with your mobile device.</p>
+									<p>Make sure your mobile device has camera access enabled.</p>
+									<button 
+										className="primary-button" 
+										onClick={() => window.location.href = "/connect"}
+										style={{ marginTop: "1rem" }}
+									>
+										Go to Connect Page
+									</button>
+								</div>
+							)}
 						</div>
 
 						<div className="metrics-container">
 							<div className="metric-card heart-rate card">
 								<h2>Heart Rate</h2>
 								<div className="metric-value">
-									<span className="value">{currentHeartRate}</span>
+									<span className="value">{currentHeartRate || "--"}</span>
 									<span className="unit">BPM</span>
 								</div>
-								<div className="chart-container">
-									<Line
-										ref={heartRateChartRef}
-										data={heartRateChartData}
-										options={chartOptions}
-									/>
-								</div>
+								{heartRateData.length > 0 ? (
+									<div className="chart-container">
+										<Line
+											ref={heartRateChartRef}
+											data={heartRateChartData}
+											options={chartOptions}
+										/>
+									</div>
+								) : (
+									<div className="no-data-message" style={{ padding: "2rem", textAlign: "center", color: "#6c757d" }}>
+										<p>Waiting for heart rate data...</p>
+										<div className="spinner" style={{ margin: "1rem auto", width: "30px", height: "30px", borderRadius: "50%", border: "3px solid #f3f3f3", borderTop: "3px solid #3498db", animation: "spin 1s linear infinite" }}></div>
+									</div>
+								)}
 							</div>
 
 							<div className="metric-card hrv card">
 								<h2>Heart Rate Variability</h2>
 								<div className="metric-value">
-									<span className="value">{currentHRV}</span>
+									<span className="value">{currentHRV || "--"}</span>
 									<span className="unit">ms</span>
 								</div>
-								<div className="chart-container">
-									<Line
-										ref={hrvChartRef}
-										data={hrvChartData}
-										options={chartOptions}
-									/>
-								</div>
+								{hrvData.length > 0 ? (
+									<div className="chart-container">
+										<Line
+											ref={hrvChartRef}
+											data={hrvChartData}
+											options={chartOptions}
+										/>
+									</div>
+								) : (
+									<div className="no-data-message" style={{ padding: "2rem", textAlign: "center", color: "#6c757d" }}>
+										<p>Waiting for HRV data...</p>
+										<div className="spinner" style={{ margin: "1rem auto", width: "30px", height: "30px", borderRadius: "50%", border: "3px solid #f3f3f3", borderTop: "3px solid #3498db", animation: "spin 1s linear infinite" }}></div>
+									</div>
+								)}
 							</div>
 						</div>
 
@@ -298,10 +326,18 @@ function LiveMonitor() {
 									Watch your heart rate and HRV measurements update in real-time
 								</li>
 							</ol>
-							<p className="tip">
-								<strong>Tip:</strong> For best results, ensure good lighting and
-								avoid moving your finger during measurement.
-							</p>
+							<div className="tip" style={{ marginTop: "1rem", padding: "0.75rem", backgroundColor: "#e9f7ef", borderRadius: "4px", borderLeft: "4px solid #28a745" }}>
+								<p><strong>Tip:</strong> For best results, ensure good lighting and avoid moving your finger during measurement.</p>
+							</div>
+							<div className="troubleshooting" style={{ marginTop: "1rem", padding: "0.75rem", backgroundColor: "#f8f9fa", borderRadius: "4px", borderLeft: "4px solid #007bff" }}>
+								<p><strong>Troubleshooting:</strong></p>
+								<ul style={{ marginLeft: "1.5rem", marginTop: "0.5rem" }}>
+									<li>If no data appears, check that your phone's camera is uncovered</li>
+									<li>Try adjusting the pressure of your finger on the camera</li>
+									<li>Ensure there is adequate lighting in the room</li>
+									<li>If problems persist, try reconnecting your phone</li>
+								</ul>
+							</div>
 						</div>
 					</>
 				)}
