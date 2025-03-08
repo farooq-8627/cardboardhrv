@@ -151,6 +151,26 @@ function ConnectPhone({ isConnected, onConnect }) {
 											WiFi network as this computer.
 										</p>
 									</div>
+									<div className="camera-requirements">
+										<h4>Camera Requirements:</h4>
+										<ul>
+											<li>
+												The app will request camera access to measure your heart
+												rate
+											</li>
+											<li>
+												Please use Chrome, Safari, or Firefox for best
+												compatibility
+											</li>
+											<li>
+												When prompted, allow camera access in your browser
+											</li>
+											<li>
+												If camera access is denied, you can still connect but
+												with limited functionality
+											</li>
+										</ul>
+									</div>
 								</div>
 							)}
 

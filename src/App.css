@@ -798,3 +798,50 @@ ul {
 	margin: 0;
 	color: #856404;
 }
+
+.warning-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+	color: #ffc107;
+}
+
+.status.warning {
+	border-left: 5px solid #ffc107;
+}
+
+.camera-permission-info {
+	margin: 1.5rem 0;
+	padding: 1rem;
+	background-color: rgba(0, 0, 0, 0.05);
+	border-radius: var(--border-radius);
+}
+
+.camera-permission-info p {
+	margin-bottom: 0.75rem;
+}
+
+.camera-permission-info button {
+	margin-top: 0.5rem;
+}
+
+.camera-requirements {
+	margin-top: 1.5rem;
+	padding: 1rem;
+	background-color: rgba(0, 0, 0, 0.03);
+	border-radius: var(--border-radius);
+	text-align: left;
+}
+
+.camera-requirements h4 {
+	margin-bottom: 0.75rem;
+	color: var(--dark-color);
+}
+
+.camera-requirements ul {
+	padding-left: 1.5rem;
+	list-style-type: disc;
+}
+
+.camera-requirements li {
+	margin-bottom: 0.5rem;
+}
