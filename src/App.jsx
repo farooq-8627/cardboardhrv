@@ -121,6 +121,69 @@ function App() {
 			handleMobileDisconnect
 		);
 
+		// Check localStorage periodically for connection data
+		const checkLocalStorage = () => {
+			try {
+				const connectionData = localStorage.getItem("cardboardhrv-connection");
+				if (connectionData) {
+					const data = JSON.parse(connectionData);
+					console.log("Found connection data in localStorage:", data);
+
+					if (data.sessionId === sessionId && data.connected) {
+						console.log("Setting connected state from localStorage data");
+						setIsConnected(true);
+						setConnectedSessionId(data.sessionId);
+
+						// Clear the data to avoid duplicate processing
+						localStorage.removeItem("cardboardhrv-connection");
+					}
+				}
+			} catch (e) {
+				console.error("Error checking localStorage:", e);
+			}
+		};
+
+		// Set up interval to check localStorage
+		const localStorageInterval = setInterval(checkLocalStorage, 2000);
+
+		// Set up BroadcastChannel if available
+		let broadcastChannel;
+		try {
+			if (typeof BroadcastChannel !== "undefined") {
+				broadcastChannel = new BroadcastChannel("cardboardhrv-channel");
+				broadcastChannel.onmessage = (event) => {
+					console.log("Received message via BroadcastChannel:", event.data);
+
+					if (
+						event.data.type === "connection" &&
+						event.data.sessionId === sessionId
+					) {
+						console.log("Setting connected state from BroadcastChannel");
+						setIsConnected(true);
+						setConnectedSessionId(event.data.sessionId);
+					}
+				};
+			}
+		} catch (e) {
+			console.error("Error setting up BroadcastChannel:", e);
+		}
+
+		// Listen for window messages (for postMessage communication)
+		const handleWindowMessage = (event) => {
+			// Validate the origin if needed
+			console.log("Received window message:", event.data);
+
+			if (event.data && event.data.type === "cardboardhrv-connection") {
+				if (event.data.sessionId === sessionId) {
+					console.log("Setting connected state from window message");
+					setIsConnected(true);
+					setConnectedSessionId(event.data.sessionId);
+				}
+			}
+		};
+
+		window.addEventListener("message", handleWindowMessage);
+
 		return () => {
 			// Clean up WebSocket service
 			websocketService.off("session", handleSessionEvent);
@@ -150,6 +213,13 @@ function App() {
 			if (connectionTimeoutRef.current) {
 				clearTimeout(connectionTimeoutRef.current);
 			}
+
+			// Clear interval
+			clearInterval(localStorageInterval);
+			if (broadcastChannel) {
+				broadcastChannel.close();
+			}
+			window.removeEventListener("message", handleWindowMessage);
 		};
 	}, [sessionId]);
 
@@ -258,6 +328,30 @@ function App() {
 		return false;
 	};
 
+	// Add a debug function to the App component:
+	const debugConnectionStatus = () => {
+		console.log("Current connection status:", {
+			isConnected,
+			connectedSessionId,
+			sessionId,
+		});
+
+		// Check if there are any stored connection attempts
+		try {
+			const connectionData = localStorage.getItem("cardboardhrv-connection");
+			console.log("localStorage connection data:", connectionData);
+		} catch (e) {
+			console.error("Error checking localStorage:", e);
+		}
+
+		// Force the connection state for testing
+		if (!isConnected && window.confirm("Force connection state for testing?")) {
+			setIsConnected(true);
+			setConnectedSessionId(sessionId);
+			alert("Connection state forced to connected!");
+		}
+	};
+
 	return (
 		<Router>
 			<div className="app-container">
@@ -305,6 +399,7 @@ function App() {
 									onConnect={connectToBackend}
 									sessionId={sessionId}
 									connectedSessionId={connectedSessionId}
+									debugConnectionStatus={debugConnectionStatus}
 								/>
 							}
 						/>

@@ -99,6 +99,9 @@ function ConnectMobile() {
 				}, 3000);
 			}
 
+			// Add this at the end of the try block in requestCameraPermission, right after startStreaming(stream):
+			forceConnectionNotification();
+
 			return true;
 		} catch (error) {
 			console.error("Camera permission request failed:", error);
@@ -153,6 +156,79 @@ function ConnectMobile() {
 					}),
 				},
 			})
+		);
+	};
+
+	// Function to force connection notification with a direct approach
+	const forceConnectionNotification = () => {
+		console.log("Forcing connection notification");
+
+		// Try multiple approaches to notify the main app
+
+		// 1. Using localStorage as a fallback communication method
+		try {
+			localStorage.setItem(
+				"cardboardhrv-connection",
+				JSON.stringify({
+					sessionId: sessionId || manualSessionId,
+					timestamp: new Date().toISOString(),
+					connected: true,
+				})
+			);
+			console.log("Set connection data in localStorage");
+		} catch (e) {
+			console.error("Failed to use localStorage:", e);
+		}
+
+		// 2. Try to use BroadcastChannel API if available
+		try {
+			if (typeof BroadcastChannel !== "undefined") {
+				const bc = new BroadcastChannel("cardboardhrv-channel");
+				bc.postMessage({
+					type: "connection",
+					sessionId: sessionId || manualSessionId,
+					timestamp: new Date().toISOString(),
+				});
+				console.log("Sent message via BroadcastChannel");
+			}
+		} catch (e) {
+			console.error("Failed to use BroadcastChannel:", e);
+		}
+
+		// 3. Still use the custom events as before
+		window.dispatchEvent(
+			new CustomEvent("cardboardhrv-mobile-connect", {
+				detail: {
+					sessionId: sessionId || manualSessionId,
+					timestamp: new Date().toISOString(),
+					forced: true,
+				},
+			})
+		);
+
+		// 4. Try to use window.opener if available (for when opened via QR code)
+		try {
+			if (window.opener && !window.opener.closed) {
+				window.opener.postMessage(
+					{
+						type: "cardboardhrv-connection",
+						sessionId: sessionId || manualSessionId,
+						timestamp: new Date().toISOString(),
+					},
+					"*"
+				);
+				console.log("Sent message to opener window");
+			}
+		} catch (e) {
+			console.error("Failed to use window.opener:", e);
+		}
+
+		// Set a flag in the component to show we've attempted connection
+		connectionAttempted.current = true;
+
+		// Update UI to show connection was attempted
+		setConnectionInfo(
+			"Connection notification sent. Please check your computer screen."
 		);
 	};
 
@@ -324,6 +400,12 @@ function ConnectMobile() {
 				"cardboardhrv-main-message",
 				handleMainAppResponse
 			);
+
+			// Clear any ping intervals
+			if (window.cardboardHrvPingInterval) {
+				clearInterval(window.cardboardHrvPingInterval);
+				window.cardboardHrvPingInterval = null;
+			}
 		};
 	}, [cameraStream]);
 
@@ -405,6 +487,17 @@ function ConnectMobile() {
 		setStatus("connected-nocamera");
 		setCameraPermission("skipped");
 		notifyMainAppConnected();
+
+		// Also try the force connection method
+		forceConnectionNotification();
+
+		// Add a periodic ping to keep trying to connect
+		const pingInterval = setInterval(() => {
+			forceConnectionNotification();
+		}, 5000); // Try every 5 seconds
+
+		// Store the interval ID for cleanup
+		window.cardboardHrvPingInterval = pingInterval;
 	};
 
 	return (
@@ -703,6 +796,43 @@ function ConnectMobile() {
 							<p>
 								Please check your computer screen to see the connection status.
 							</p>
+						</div>
+
+						<div
+							className="debug-info"
+							style={{
+								margin: "1rem 0",
+								padding: "1rem",
+								backgroundColor: "#f0f0f0",
+								borderRadius: "4px",
+								fontSize: "0.8rem",
+							}}
+						>
+							<h4>Debug Information</h4>
+							<p>Session ID: {sessionId || manualSessionId}</p>
+							<p>
+								Connection Status:{" "}
+								{connectionAttempted.current ? "Attempted" : "Not Attempted"}
+							</p>
+							<p>Browser Info: {browserInfo}</p>
+							<button
+								onClick={() => {
+									forceConnectionNotification();
+									alert(
+										"Connection notification sent. Please check your computer."
+									);
+								}}
+								style={{
+									padding: "0.5rem",
+									marginTop: "0.5rem",
+									backgroundColor: "#007bff",
+									color: "white",
+									border: "none",
+									borderRadius: "4px",
+								}}
+							>
+								Force Connection Notification
+							</button>
 						</div>
 
 						<div className="buttons">

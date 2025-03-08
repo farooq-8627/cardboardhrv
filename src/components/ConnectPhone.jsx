@@ -7,6 +7,7 @@ function ConnectPhone({
 	onConnect,
 	sessionId,
 	connectedSessionId,
+	debugConnectionStatus,
 }) {
 	const [activeTab, setActiveTab] = useState("qrcode");
 	const [manualCode, setManualCode] = useState("");
@@ -210,6 +211,35 @@ function ConnectPhone({
 								</div>
 							</div>
 						)}
+					</div>
+
+					<div
+						className="debug-section"
+						style={{
+							marginTop: "1rem",
+							padding: "1rem",
+							backgroundColor: "#f0f0f0",
+							borderRadius: "4px",
+							fontSize: "0.8rem",
+						}}
+					>
+						<h4>Debug Information</h4>
+						<p>Session ID: {sessionId}</p>
+						<p>Connected: {isConnected ? "Yes" : "No"}</p>
+						<p>Connected Session ID: {connectedSessionId || "None"}</p>
+						<button
+							onClick={debugConnectionStatus}
+							style={{
+								padding: "0.5rem",
+								marginTop: "0.5rem",
+								backgroundColor: "#007bff",
+								color: "white",
+								border: "none",
+								borderRadius: "4px",
+							}}
+						>
+							Debug Connection
+						</button>
 					</div>
 				</div>
 			)}
