@@ -24,13 +24,13 @@ function App() {
 										<div className="hero-section">
 											<h1>CardboardHRV</h1>
 											<h2>
-												Bridging Virtual Reality and Biofeedback with a
-												Cost-Effective Heart Rate Variability System
+												Affordable Heart Rate Variability Monitoring Using Your
+												Smartphone
 											</h2>
 											<p className="subtitle">
-												Transform your smartphone into a heart rate monitor
-												using just your phone's camera and a simple cardboard
-												attachment.
+												A research-based approach to measure heart rate
+												variability through photoplethysmography using your
+												smartphone's camera and a simple cardboard attachment.
 											</p>
 											<Link to="/connect" className="cta-button">
 												Get Started
@@ -42,33 +42,34 @@ function App() {
 											<div className="features-grid">
 												<div className="feature-card">
 													<div className="feature-icon">📱</div>
-													<h3>Mobile-First Design</h3>
+													<h3>Smartphone PPG</h3>
 													<p>
-														Use your smartphone's camera for accurate PPG signal
-														detection
+														Uses your phone's camera to capture
+														photoplethysmography signals from your forehead
 													</p>
 												</div>
 												<div className="feature-card">
 													<div className="feature-icon">💓</div>
-													<h3>Real-time HRV Analysis</h3>
+													<h3>Real-time Analysis</h3>
 													<p>
-														Monitor heart rate variability metrics in real-time
-													</p>
-												</div>
-												<div className="feature-card">
-													<div className="feature-icon">🎯</div>
-													<h3>Biofeedback Training</h3>
-													<p>
-														Improve heart rate variability through guided
-														exercises
+														Processes PPG signals to calculate heart rate and
+														HRV metrics in real-time
 													</p>
 												</div>
 												<div className="feature-card">
 													<div className="feature-icon">📊</div>
-													<h3>Data Visualization</h3>
+													<h3>HRV Metrics</h3>
 													<p>
-														View your HRV data through intuitive charts and
-														metrics
+														Measures key HRV parameters including SDNN, RMSSD,
+														LF, HF, and LF/HF ratio
+													</p>
+												</div>
+												<div className="feature-card">
+													<div className="feature-icon">💰</div>
+													<h3>Cost-Effective</h3>
+													<p>
+														Affordable alternative to expensive HRV monitoring
+														devices using existing technology
 													</p>
 												</div>
 											</div>
@@ -79,58 +80,56 @@ function App() {
 											<div className="steps-grid">
 												<div className="step-card">
 													<div className="step-number">1</div>
-													<h3>Connect Your Phone</h3>
+													<h3>Optical Setup</h3>
 													<p>
-														Scan the QR code to link your smartphone with the
-														system
+														Position your phone in the cardboard holder with the
+														optical fiber attachment
 													</p>
 												</div>
 												<div className="step-card">
 													<div className="step-number">2</div>
-													<h3>Position Camera</h3>
+													<h3>Signal Capture</h3>
 													<p>
-														Place your finger over the camera lens for PPG
-														measurement
+														Camera captures PPG signals from your lateral
+														forehead through the optical fiber
 													</p>
 												</div>
 												<div className="step-card">
 													<div className="step-number">3</div>
-													<h3>Start Monitoring</h3>
+													<h3>Data Processing</h3>
 													<p>
-														View real-time heart rate and HRV metrics on your
-														desktop
+														Advanced algorithms process the PPG signal to
+														extract heart rate and HRV metrics
 													</p>
 												</div>
 											</div>
 										</div>
 
 										<div className="research-section">
-											<h2>Research-Based Approach</h2>
+											<h2>Research Foundation</h2>
 											<div className="research-content">
 												<p>
-													CardboardHRV combines proven photoplethysmography
-													(PPG) techniques with accessible VR technology to
-													create an affordable yet effective HRV biofeedback
-													system. Our approach is based on established research
-													in:
+													CardboardHRV is built on established research in
+													photoplethysmography and heart rate variability
+													analysis. Our approach combines:
 												</p>
 												<ul>
-													<li>Heart Rate Variability Analysis</li>
-													<li>Mobile PPG Signal Processing</li>
-													<li>Virtual Reality Biofeedback</li>
-													<li>Stress Reduction Techniques</li>
+													<li>Validated PPG Signal Processing Techniques</li>
+													<li>Clinical HRV Analysis Standards</li>
+													<li>Affordable Hardware Solutions</li>
+													<li>Real-time Data Processing Methods</li>
 												</ul>
 											</div>
 										</div>
 
 										<div className="cta-section">
-											<h2>Ready to Start?</h2>
+											<h2>Ready to Monitor Your HRV?</h2>
 											<p>
-												Begin monitoring your heart rate variability in just a
-												few clicks
+												Start measuring your heart rate variability with just
+												your smartphone and our simple setup
 											</p>
 											<Link to="/connect" className="cta-button">
-												Connect Your Device
+												Begin Monitoring
 											</Link>
 										</div>
 									</div>

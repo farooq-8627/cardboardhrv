@@ -9,17 +9,17 @@ function ProjectInfo() {
 			<section className="info-section">
 				<h3>Project Overview</h3>
 				<p>
-					CardboardHRV is an affordable and effective heart rate variability
-					(HRV) biofeedback system leveraging Google Cardboard VR. Our system is
-					designed to provide easy access to HRV biofeedback without sacrificing
-					therapeutic value.
+					CardboardHRV is an innovative approach to heart rate variability (HRV)
+					monitoring that uses a smartphone's camera with a specialized optical
+					fiber attachment. Our system transforms any modern smartphone into a
+					precise HRV monitoring device, making this valuable health metric
+					accessible to everyone.
 				</p>
 				<p>
-					By adapting the Google Cardboard VR headset with an optical fiber
-					modification, we enable the camera of the inserted phone to capture
-					the photoplethysmography (PPG) signal from the user's lateral
-					forehead, allowing CardboardHRV to accurately calculate heart rate
-					variability as a basis for biofeedback.
+					By positioning the smartphone's camera with an optical fiber to
+					capture photoplethysmography (PPG) signals from the lateral forehead,
+					we can accurately measure heart rate variability without the need for
+					expensive specialized equipment.
 				</p>
 			</section>
 
@@ -27,98 +27,128 @@ function ProjectInfo() {
 				<h3>System Components</h3>
 				<div className="components-grid">
 					<div className="component">
-						<h4>Hardware</h4>
+						<h4>Hardware Setup</h4>
 						<ul>
-							<li>Google Cardboard VR headset</li>
-							<li>Optical fiber attachment</li>
-							<li>Smartphone (Android/iOS)</li>
+							<li>Smartphone with camera</li>
+							<li>Custom optical fiber attachment</li>
+							<li>Adjustable head mount</li>
+							<li>Light-blocking enclosure</li>
 						</ul>
 					</div>
 					<div className="component">
-						<h4>Software</h4>
+						<h4>Software Components</h4>
 						<ul>
-							<li>Mobile application for PPG capture</li>
-							<li>Real-time signal processing algorithms</li>
-							<li>Biofeedback visualization in VR</li>
-							<li>This web interface for monitoring</li>
+							<li>Real-time PPG signal processing</li>
+							<li>HRV analysis algorithms</li>
+							<li>Web-based monitoring interface</li>
+							<li>Cross-device data synchronization</li>
 						</ul>
 					</div>
 				</div>
 			</section>
 
 			<section className="info-section">
-				<h3>How It Works</h3>
+				<h3>Technical Workflow</h3>
 				<ol className="workflow-steps">
 					<li>
-						<h4>Signal Capture</h4>
+						<h4>Signal Acquisition</h4>
 						<p>
-							The smartphone's camera, positioned with an optical fiber
-							attachment, captures photoplethysmography (PPG) signals from the
-							user's forehead.
+							The optical fiber guides light to and from the lateral forehead,
+							allowing the smartphone camera to capture subtle blood volume
+							changes through PPG.
 						</p>
 					</li>
 					<li>
-						<h4>Signal Processing</h4>
+						<h4>Data Processing</h4>
 						<p>
-							Raw PPG signals are processed to detect individual heartbeats and
-							calculate heart rate variability metrics.
+							Raw PPG signals undergo real-time processing to extract
+							beat-to-beat intervals and calculate heart rate variability
+							metrics.
 						</p>
 					</li>
 					<li>
-						<h4>Biofeedback</h4>
+						<h4>HRV Analysis</h4>
 						<p>
-							HRV data is visualized in an immersive VR environment, providing
-							real-time feedback to guide breathing and promote coherence.
+							Advanced algorithms compute key HRV parameters including SDNN,
+							RMSSD, and frequency domain measures (LF, HF, LF/HF ratio).
 						</p>
 					</li>
 					<li>
-						<h4>Monitoring</h4>
+						<h4>Real-time Monitoring</h4>
 						<p>
-							This web application allows researchers and practitioners to
-							monitor sessions and analyze the collected data.
+							Processed data is displayed on a web dashboard, allowing immediate
+							visualization of HRV metrics and trends.
 						</p>
 					</li>
 				</ol>
 			</section>
 
 			<section className="info-section">
-				<h3>Benefits of HRV Biofeedback</h3>
+				<h3>Applications & Benefits</h3>
 				<div className="benefits-grid">
 					<div className="benefit">
-						<h4>Stress Reduction</h4>
+						<h4>Research Applications</h4>
 						<p>
-							Regular HRV biofeedback practice has been shown to reduce stress
-							and anxiety levels.
+							Enables large-scale HRV studies with minimal hardware requirements
+							and standardized data collection.
 						</p>
 					</div>
 					<div className="benefit">
-						<h4>Improved Focus</h4>
+						<h4>Clinical Assessment</h4>
 						<p>
-							HRV training can enhance attention, concentration, and cognitive
-							performance.
+							Provides a cost-effective tool for preliminary HRV assessment in
+							clinical settings.
 						</p>
 					</div>
 					<div className="benefit">
-						<h4>Better Sleep</h4>
+						<h4>Personal Health Monitoring</h4>
 						<p>
-							Many users report improved sleep quality after consistent HRV
-							biofeedback practice.
+							Allows individuals to track their HRV trends using their own
+							smartphone.
 						</p>
 					</div>
 					<div className="benefit">
-						<h4>Athletic Performance</h4>
+						<h4>Accessibility</h4>
 						<p>
-							Athletes use HRV biofeedback to optimize recovery and enhance
-							performance.
+							Makes HRV monitoring accessible to a wider population through
+							affordable technology.
 						</p>
+					</div>
+				</div>
+			</section>
+
+			<section className="info-section">
+				<h3>Technical Specifications</h3>
+				<div className="specs-grid">
+					<div className="spec">
+						<h4>Signal Processing</h4>
+						<ul>
+							<li>30 FPS video processing</li>
+							<li>Real-time PPG extraction</li>
+							<li>Adaptive noise filtering</li>
+							<li>Beat detection algorithms</li>
+						</ul>
+					</div>
+					<div className="spec">
+						<h4>HRV Metrics</h4>
+						<ul>
+							<li>Time-domain: SDNN, RMSSD</li>
+							<li>Frequency-domain: LF, HF, LF/HF</li>
+							<li>Real-time calculation</li>
+							<li>Data validation checks</li>
+						</ul>
 					</div>
 				</div>
 			</section>
 
 			<div className="cta-section">
 				<h3>Ready to try CardboardHRV?</h3>
+				<p>
+					Experience accurate HRV monitoring using your smartphone's camera with
+					our innovative optical setup.
+				</p>
 				<Link to="/connect" className="cta-button">
-					Connect Your Phone
+					Start Monitoring
 				</Link>
 			</div>
 		</div>
