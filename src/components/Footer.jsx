@@ -7,7 +7,7 @@ function Footer() {
         CardboardHRV - Research Project © {new Date().getFullYear()}
       </p>
       <p>
-        <small>Powered by React.js and the Web Bluetooth API</small>
+        <small>Powered by SRM AP Reseach Students</small>
       </p>
     </footer>
   );
